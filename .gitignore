@@ -1,1 +1,14 @@
 .env
+.venv/
+.direnv/
+__pycache__/
+*.pyc
+
+# TEMPORARY: the corpus data format is still being validated. Remove this
+# line (keep the index rules below) once the schema is settled, to start
+# committing data/corpus.jsonl + data/state.json.
+data/
+
+# Rebuildable search index (derived from data/corpus.jsonl)
+data/index.sqlite
+data/index.sqlite-*

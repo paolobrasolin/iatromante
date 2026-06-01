@@ -1,0 +1,45 @@
+# Search configuration for the literature feed.
+#
+# Each pathology defines:
+#   terms : free-text synonyms searched in title/abstract across all sources
+#   mesh  : MeSH descriptors (PubMed's controlled vocabulary) for precise recall
+#
+# Ambiguous abbreviations (e.g. "FMS", "DIE") are intentionally omitted: as free
+# text they match thousands of unrelated papers. Add them back only if you accept
+# the noise.
+
+backfill_start: "2015-01-01"   # earliest publication date fetched on first run (override with --since / --all)
+lookback_days: 5               # re-scan this many days before each watermark to catch late-indexed records
+
+pathologies:
+  endometriosis:
+    terms:
+      - endometriosis
+      - endometrioma
+      - endometriomas
+      - endometriotic
+      - "deep infiltrating endometriosis"
+      - "deep endometriosis"
+    mesh:
+      - Endometriosis
+
+  lipedema:
+    terms:
+      - lipedema
+      - lipoedema          # UK / Commonwealth spelling
+      - lipalgia
+      - "lipohyperplasia dolorosa"
+      - "painful fat syndrome"
+      - lipoedematous
+    mesh:
+      - Lipedema
+
+  fibromyalgia:
+    terms:
+      - fibromyalgia
+      - "fibromyalgia syndrome"
+      - fibromyalgic
+      - fibrositis
+      - "fibromyalgia-fibromyositis"
+    mesh:
+      - Fibromyalgia
