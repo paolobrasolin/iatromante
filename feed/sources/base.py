@@ -45,7 +45,9 @@ def get_json(client: httpx.Client, url: str, params: dict, *, retries: int = 4) 
             if r.status_code in (429, 500, 502, 503, 504):
                 raise httpx.HTTPStatusError("retryable", request=r.request, response=r)
             r.raise_for_status()
-            return r.json()
+            # strict=False: NCBI esearch occasionally embeds raw control chars in
+            # the query-translation string, which strict JSON parsing rejects.
+            return _json.loads(r.text, strict=False)
         except (httpx.HTTPStatusError, httpx.TransportError):
             if attempt == retries - 1:
                 raise

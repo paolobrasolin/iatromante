@@ -15,6 +15,7 @@ from pathlib import Path
 
 import yaml
 
+from . import fulltext as fulltext_mod
 from . import index as index_mod
 from .sources import DEFAULT_SOURCES, REGISTRY
 from .sources.base import make_client
@@ -89,6 +90,17 @@ def cmd_fetch(args) -> int:
     return 0
 
 
+def cmd_fulltext(args) -> int:
+    now = datetime.now().isoformat(timespec="seconds")
+    paths = args.pathology[0] if args.pathology else None
+    stats = fulltext_mod.fetch_all(pathology=paths, limit=args.limit, fetched_at=now)
+    print(f"\nfull text: attempted {stats['attempted']} | "
+          f"{stats['with_body']} with body | {stats['abstract_only']} front-only | "
+          f"{stats['failed']} failed")
+    print(f"stored under data/fulltext/ (manifest: data/fulltext/manifest.json)")
+    return 0
+
+
 def cmd_index(args) -> int:
     n = index_mod.build()
     print(f"indexed {n} papers -> {index_mod.INDEX_PATH}")
@@ -144,6 +156,11 @@ def main(argv=None) -> int:
     f.add_argument("--since", help="override start date YYYY-MM-DD (does not advance watermark)")
     f.add_argument("--all", action="store_true", help="fetch full history (ignore watermark)")
     f.set_defaults(func=cmd_fetch)
+
+    ft = sub.add_parser("fulltext", help="download open-access full text (PMC) into data/fulltext/")
+    ft.add_argument("--pathology", action="append", help="limit to this pathology")
+    ft.add_argument("--limit", type=int, help="cap number of papers fetched this run")
+    ft.set_defaults(func=cmd_fulltext)
 
     i = sub.add_parser("index", help="(re)build the SQLite/FTS5 search index")
     i.set_defaults(func=cmd_index)
