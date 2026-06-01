@@ -17,6 +17,7 @@ import yaml
 
 from . import fulltext as fulltext_mod
 from . import index as index_mod
+from . import openaccess as openaccess_mod
 from .sources import DEFAULT_SOURCES, REGISTRY
 from .sources.base import make_client
 from .store import Corpus, load_state, save_state
@@ -101,6 +102,22 @@ def cmd_fulltext(args) -> int:
     return 0
 
 
+def cmd_resolve_oa(args) -> int:
+    paths = args.pathology[0] if args.pathology else None
+    stats = openaccess_mod.resolve(pathology=paths, limit=args.limit)
+    print(f"\nopen-access resolution: checked {stats['checked']} paywalled-or-unknown papers")
+    print(f"  legal OA copy found : {stats['oa_found']}")
+    print(f"  no OA copy          : {stats['no_oa']}")
+    print(f"  not in Unpaywall    : {stats['not_indexed']}")
+    print(f"  failed              : {stats['failed']}")
+    if stats.get("by_host"):
+        print("  by host:")
+        for h, c in sorted(stats["by_host"].items(), key=lambda kv: -kv[1]):
+            print(f"    {h:14s} {c}")
+    print("recorded in data/openaccess/manifest.json")
+    return 0
+
+
 def cmd_index(args) -> int:
     n = index_mod.build()
     print(f"indexed {n} papers -> {index_mod.INDEX_PATH}")
@@ -161,6 +178,11 @@ def main(argv=None) -> int:
     ft.add_argument("--pathology", action="append", help="limit to this pathology")
     ft.add_argument("--limit", type=int, help="cap number of papers fetched this run")
     ft.set_defaults(func=cmd_fulltext)
+
+    ro = sub.add_parser("resolve-oa", help="find legal open-access copies of paywalled papers (Unpaywall)")
+    ro.add_argument("--pathology", action="append", help="limit to this pathology")
+    ro.add_argument("--limit", type=int, help="cap number of DOIs checked this run")
+    ro.set_defaults(func=cmd_resolve_oa)
 
     i = sub.add_parser("index", help="(re)build the SQLite/FTS5 search index")
     i.set_defaults(func=cmd_index)
