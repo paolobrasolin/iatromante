@@ -15,6 +15,7 @@ from pathlib import Path
 
 import yaml
 
+from . import cluster as cluster_mod
 from . import embed as embed_mod
 from . import fulltext as fulltext_mod
 from . import index as index_mod
@@ -126,6 +127,15 @@ def cmd_embed(args) -> int:
     return 0
 
 
+def cmd_cluster(args) -> int:
+    r = cluster_mod.build(k=args.k)
+    print(f"\nclustered {r['papers']} papers into {r['clusters']} topics "
+          f"(coords + labels in data/vectors.sqlite)")
+    for c in sorted(r["sizes"], key=lambda c: -r["sizes"][c])[:15]:
+        print(f"  [{r['sizes'][c]:5d}] {r['labels'][c]}")
+    return 0
+
+
 def cmd_index(args) -> int:
     n = index_mod.build()
     print(f"indexed {n} papers -> {index_mod.INDEX_PATH}")
@@ -206,6 +216,10 @@ def main(argv=None) -> int:
     e = sub.add_parser("embed", help="compute local semantic embeddings (deep search) into data/vectors.sqlite")
     e.add_argument("--limit", type=int, help="cap number of papers embedded this run")
     e.set_defaults(func=cmd_embed)
+
+    cl = sub.add_parser("cluster", help="topic-cluster + 2D-project the embeddings for the map")
+    cl.add_argument("--k", type=int, default=60, help="number of topics (default 60)")
+    cl.set_defaults(func=cmd_cluster)
 
     i = sub.add_parser("index", help="(re)build the SQLite/FTS5 search index")
     i.set_defaults(func=cmd_index)

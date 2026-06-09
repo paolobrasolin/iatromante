@@ -10,6 +10,10 @@ dependencies = [
     "fastembed>=0.4",
     "sqlite-vec>=0.1.6",
     "numpy>=1.26",
+    # topic clustering + 2D map projection
+    "scikit-learn>=1.4",
+    "umap-learn>=0.5.6",
+    "hdbscan>=0.8.38",
 ]
 
 [project.scripts]
