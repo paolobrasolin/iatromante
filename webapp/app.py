@@ -181,11 +181,11 @@ def api_map(pathology: str | None = None):
         where = "WHERE p.pathologies LIKE '%'||?||'%'"
         params.append(pathology)
     rows = con.execute(
-        f"""SELECT m.x, m.y, m.cluster, p.year, p.pathologies FROM paper_map m
+        f"""SELECT m.x, m.y, m.cluster, p.year, p.pathologies, p.is_oa FROM paper_map m
             JOIN idx.papers p ON p.id = m.paper_id {where}""", params).fetchall()
     con.close()
     points = [[round(r["x"], 2), round(r["y"], 2), r["cluster"], r["year"] or 0,
-               _mask(r["pathologies"])] for r in rows]
+               _mask(r["pathologies"]), int(r["is_oa"] or 0)] for r in rows]
     return {"points": points}
 
 

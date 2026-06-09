@@ -139,6 +139,21 @@ const COND_RGB = { 1: [194, 84, 122], 2: [201, 138, 43], 4: [106, 90, 205] }; //
 const MULTI_RGB = [214, 36, 143];                      // cross-condition standout (magenta)
 const COND_INFO = [{ m: 1, name: "endometriosis" }, { m: 2, name: "lipedema" }, { m: 4, name: "fibromyalgia" }];
 const popcount = m => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
+let oaOnly = false;
+let view = { z: 1, ox: 0, oy: 0 };          // zoom + pan (pan offsets in device px)
+const visible = p => p[3] >= yearMin && p[3] <= yearMax && (!oaOnly || p[5]);
+function makeProj(t) {
+  const bx = x => t.pad + (x - t.minx) / (t.maxx - t.minx || 1) * (t.W - 2 * t.pad);
+  const by = y => t.H - t.pad - (y - t.miny) / (t.maxy - t.miny || 1) * (t.H - 2 * t.pad);
+  return { sx: x => bx(x) * t.z + t.ox, sy: y => by(y) * t.z + t.oy };
+}
+function clampPan() {
+  if (view.z <= 1) { view.z = 1; view.ox = 0; view.oy = 0; return; }
+  if (!MAP.tx) return;
+  const W = MAP.tx.W, H = MAP.tx.H;
+  view.ox = Math.min(0, Math.max(W - W * view.z, view.ox));
+  view.oy = Math.min(0, Math.max(H - H * view.z, view.oy));
+}
 
 function loadMap() {
   mapLoaded = true;
@@ -147,6 +162,7 @@ function loadMap() {
   if (sel.map) u.searchParams.set("pathology", sel.map);
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
     MAP.points = m.points; MAP.clusters = c.clusters; MAP.focus = null; MAP.condFocus = null;
+    view = { z: 1, ox: 0, oy: 0 };
     computeBounds(); setupYearSlider(); drawMap(); buildLegend();
   });
 }
@@ -197,13 +213,13 @@ function drawMap() {
   const cv = $("#mapcanvas"), dpr = window.devicePixelRatio || 1;
   cv.width = cv.clientWidth * dpr; cv.height = cv.clientHeight * dpr;
   const W = cv.width, H = cv.height, ctx = cv.getContext("2d");
+  MAP.tx = { minx: MAP.bounds.minx, maxx: MAP.bounds.maxx, miny: MAP.bounds.miny,
+             maxy: MAP.bounds.maxy, W, H, pad: 8 * dpr, z: view.z, ox: view.ox, oy: view.oy };
+  const { sx, sy } = makeProj(MAP.tx);
   const img = ctx.createImageData(W, H), buf = img.data;
-  const { minx, maxx, miny, maxy } = MAP.bounds, pad = 8 * dpr;
-  const sx = x => pad + (x - minx) / (maxx - minx || 1) * (W - 2 * pad);
-  const sy = y => H - pad - (y - miny) / (maxy - miny || 1) * (H - 2 * pad);
-  MAP.tx = { minx, maxx, miny, maxy, W, H, pad, dpr };
-  const put = (px, py, r, g, b, big) => {
-    px |= 0; py |= 0; const s = big ? 3 : 2;
+  const NS = view.z > 4 ? 3 : 2, BS = NS + 1;       // points grow a touch when zoomed in
+  const put = (px, py, r, g, b, s) => {
+    px |= 0; py |= 0;
     for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++) {
       const X = px + dx, Y = py + dy;
       if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
@@ -213,19 +229,16 @@ function drawMap() {
   let shown = 0;
   // 3 layered passes: dimmed background, highlighted points, then emphasized (big) on top
   for (const p of MAP.points) {
-    if (p[3] < yearMin || p[3] > yearMax) continue;
-    if (colorOf(p).hl) continue;
-    put(sx(p[0]), sy(p[1]), 226, 226, 234); shown++;
+    if (!visible(p) || colorOf(p).hl) continue;
+    put(sx(p[0]), sy(p[1]), 226, 226, 234, NS);
   }
   for (const p of MAP.points) {
-    if (p[3] < yearMin || p[3] > yearMax) continue;
-    const k = colorOf(p); if (!k.hl || k.big) continue;
-    put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], false); shown++;
+    if (!visible(p)) continue; const k = colorOf(p); if (!k.hl || k.big) continue;
+    put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], NS); shown++;
   }
   for (const p of MAP.points) {
-    if (p[3] < yearMin || p[3] > yearMax) continue;
-    const k = colorOf(p); if (!k.hl || !k.big) continue;
-    put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], true); shown++;
+    if (!visible(p)) continue; const k = colorOf(p); if (!k.hl || !k.big) continue;
+    put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], BS); shown++;
   }
   ctx.putImageData(img, 0, 0);
   if (cmode === "topic" && MAP.focus != null) {
@@ -282,23 +295,51 @@ $$("#map-mode button").forEach(b => b.onclick = () => {
   drawMap(); buildLegend();
 });
 
-// click a dot -> open the nearest paper
-$("#mapcanvas").addEventListener("click", e => {
-  if (!MAP.tx) return;
-  const cv = e.currentTarget, rect = cv.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (cv.width / rect.width);
-  const my = (e.clientY - rect.top) * (cv.height / rect.height);
-  const { minx, maxx, miny, maxy, W, H, pad, dpr } = MAP.tx;
-  const sx = x => pad + (x - minx) / (maxx - minx || 1) * (W - 2 * pad);
-  const sy = y => H - pad - (y - miny) / (maxy - miny || 1) * (H - 2 * pad);
+// ---- map interaction: click-to-open, zoom, pan -------------------------
+const mapcv = $("#mapcanvas");
+let dragging = false, dragMoved = false, lastX = 0, lastY = 0;
+
+function evToCanvas(e) {  // event -> device-pixel canvas coords
+  const rect = mapcv.getBoundingClientRect();
+  return [(e.clientX - rect.left) * (mapcv.width / rect.width),
+          (e.clientY - rect.top) * (mapcv.height / rect.height)];
+}
+
+mapcv.addEventListener("click", e => {
+  if (!MAP.tx || dragMoved) { dragMoved = false; return; }  // ignore the click that ends a drag
+  const [mx, my] = evToCanvas(e);
+  const { sx, sy } = makeProj(MAP.tx);
   let best = null, bd = Infinity;
   for (const p of MAP.points) {
-    if (p[3] < yearMin || p[3] > yearMax) continue;
+    if (!visible(p)) continue;
     const dx = sx(p[0]) - mx, dy = sy(p[1]) - my, d = dx * dx + dy * dy;
     if (d < bd) { bd = d; best = p; }
   }
-  if (best && bd <= (9 * dpr) ** 2)
+  if (best && bd <= (9 * (window.devicePixelRatio || 1)) ** 2)
     api(`/api/map/at?x=${best[0]}&y=${best[1]}`).then(r => { if (r.id) openPaper(r.id); });
 });
+
+mapcv.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (!MAP.tx) return;
+  const [mx, my] = evToCanvas(e);
+  const nz = Math.min(40, Math.max(1, view.z * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+  view.ox = mx - (mx - view.ox) * (nz / view.z);   // keep the point under the cursor fixed
+  view.oy = my - (my - view.oy) * (nz / view.z);
+  view.z = nz; clampPan(); drawMap();
+}, { passive: false });
+
+mapcv.addEventListener("mousedown", e => { dragging = true; dragMoved = false; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener("mousemove", e => {
+  if (!dragging) return;
+  const sc = mapcv.width / mapcv.getBoundingClientRect().width;
+  view.ox += (e.clientX - lastX) * sc; view.oy += (e.clientY - lastY) * sc;
+  lastX = e.clientX; lastY = e.clientY; dragMoved = true;
+  clampPan(); drawMap();
+});
+window.addEventListener("mouseup", () => { dragging = false; });
+
+$("#map-reset").onclick = () => { view = { z: 1, ox: 0, oy: 0 }; drawMap(); };
+$("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); };
 
 window.addEventListener("resize", () => { if (mapLoaded && $("#panel-map").classList.contains("active")) drawMap(); });

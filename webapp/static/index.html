@@ -55,6 +55,8 @@
           <button data-cm="condition">Conditions</button>
         </div>
         <div id="map-chips" style="display:flex;gap:8px;"></div>
+        <span class="spacer"></span>
+        <label id="oa-toggle"><input type="checkbox" id="oa-only"> open access only</label>
       </div>
       <div id="map-time">
         <b id="yr-from-lab"></b>
@@ -68,9 +70,13 @@
         <span class="count" id="map-count"></span>
       </div>
       <div id="mapwrap">
-        <canvas id="mapcanvas"></canvas>
+        <div id="mapview">
+          <canvas id="mapcanvas"></canvas>
+          <button id="map-reset" title="Reset zoom & pan">reset view</button>
+        </div>
         <div id="legend"></div>
       </div>
+      <p class="maphint">Scroll to zoom · drag to pan · click a dot to open it</p>
     </section>
   </main>
 
