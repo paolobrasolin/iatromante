@@ -238,7 +238,9 @@ function drawMap() {
              maxy: MAP.bounds.maxy, W, H, pad: 8 * dpr, z: view.z, ox: view.ox, oy: view.oy };
   const { sx, sy } = makeProj(MAP.tx);
   const img = ctx.createImageData(W, H), buf = img.data;
-  const NS = view.z > 4 ? 3 : 2, BS = NS + 1;       // points grow a touch when zoomed in
+  // point size scales continuously with zoom (sub-linear so it stays sane at high zoom)
+  const NS = Math.max(2, Math.min(14, Math.round(1.5 * dpr * Math.sqrt(view.z))));
+  const BS = NS + Math.max(1, Math.round(dpr));
   const put = (px, py, r, g, b, s) => {
     px |= 0; py |= 0;
     for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++) {
