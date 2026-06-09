@@ -131,17 +131,22 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 
 // ---- map ----------------------------------------------------------------
 let mapLoaded = false;
-let MAP = { points: [], clusters: [], focus: null, bounds: null };
+let MAP = { points: [], clusters: [], focus: null, condFocus: null, bounds: null, tx: null };
 let yearMin = 0, yearMax = 9999;
-const RGB = {};  // cluster -> [r,g,b] cache
+let cmode = "topic";                                   // "topic" | "condition"
+const RGB = {};                                        // cluster -> [r,g,b] cache
+const COND_RGB = { 1: [194, 84, 122], 2: [201, 138, 43], 4: [106, 90, 205] }; // endo/lip/fibro
+const MULTI_RGB = [214, 36, 143];                      // cross-condition standout (magenta)
+const COND_INFO = [{ m: 1, name: "endometriosis" }, { m: 2, name: "lipedema" }, { m: 4, name: "fibromyalgia" }];
+const popcount = m => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
 
 function loadMap() {
   mapLoaded = true;
-  $("#mapcanvas").parentElement && ($("#map-count").textContent = "loading…");
+  $("#map-count").textContent = "loading…";
   const u = new URL("/api/map", location.origin);
   if (sel.map) u.searchParams.set("pathology", sel.map);
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
-    MAP.points = m.points; MAP.clusters = c.clusters; MAP.focus = null;
+    MAP.points = m.points; MAP.clusters = c.clusters; MAP.focus = null; MAP.condFocus = null;
     computeBounds(); setupYearSlider(); drawMap(); buildLegend();
   });
 }
@@ -152,22 +157,41 @@ function computeBounds() {
   }
   MAP.bounds = { minx: a, maxx: b, miny: cc, maxy: d };
 }
+function updateBand() {
+  const from = $("#yr-from"), to = $("#yr-to");
+  const lo = +from.min, span = (+from.max - lo) || 1;
+  const a = Math.min(+from.value, +to.value), b = Math.max(+from.value, +to.value);
+  $("#yr-band").style.left = (a - lo) / span * 100 + "%";
+  $("#yr-band").style.width = (b - a) / span * 100 + "%";
+}
 function setupYearSlider() {
   let lo = Infinity, hi = -Infinity;
   for (const p of MAP.points) { const y = p[3]; if (y > 1900) { if (y < lo) lo = y; if (y > hi) hi = y; } }
   if (!isFinite(lo)) { lo = 1950; hi = 2026; }
   const from = $("#yr-from"), to = $("#yr-to");
-  from.min = to.min = lo; from.max = to.max = hi;
-  from.value = lo; to.value = hi;
+  from.min = to.min = lo; from.max = to.max = hi; from.value = lo; to.value = hi;
   yearMin = lo; yearMax = hi;
   $("#yr-from-lab").textContent = lo; $("#yr-to-lab").textContent = hi;
   const onInput = () => {
     yearMin = Math.min(+from.value, +to.value);
     yearMax = Math.max(+from.value, +to.value);
     $("#yr-from-lab").textContent = yearMin; $("#yr-to-lab").textContent = yearMax;
-    drawMap();
+    updateBand(); drawMap();
   };
   from.oninput = onInput; to.oninput = onInput;
+  updateBand();
+}
+function colorOf(p) {  // -> {rgb, hl, big}
+  const c = p[2], mask = p[4];
+  if (cmode === "condition") {
+    const multi = popcount(mask) > 1;
+    const rgb = multi ? MULTI_RGB : (COND_RGB[mask] || [200, 200, 208]);
+    let hl = true;
+    if (MAP.condFocus === "multi") hl = multi;
+    else if (MAP.condFocus != null) hl = (mask & MAP.condFocus) > 0;
+    return { rgb, hl, big: multi };
+  }
+  return { rgb: RGB[c] || (RGB[c] = clusterRGB(c)), hl: MAP.focus == null || c === MAP.focus, big: false };
 }
 function drawMap() {
   const cv = $("#mapcanvas"), dpr = window.devicePixelRatio || 1;
@@ -177,33 +201,34 @@ function drawMap() {
   const { minx, maxx, miny, maxy } = MAP.bounds, pad = 8 * dpr;
   const sx = x => pad + (x - minx) / (maxx - minx || 1) * (W - 2 * pad);
   const sy = y => H - pad - (y - miny) / (maxy - miny || 1) * (H - 2 * pad);
-  const put = (px, py, r, g, b) => {
-    px |= 0; py |= 0;
-    for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) {
+  MAP.tx = { minx, maxx, miny, maxy, W, H, pad, dpr };
+  const put = (px, py, r, g, b, big) => {
+    px |= 0; py |= 0; const s = big ? 3 : 2;
+    for (let dx = 0; dx < s; dx++) for (let dy = 0; dy < s; dy++) {
       const X = px + dx, Y = py + dy;
       if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
       const i = (Y * W + X) * 4; buf[i] = r; buf[i + 1] = g; buf[i + 2] = b; buf[i + 3] = 255;
     }
   };
   let shown = 0;
-  // pass 1: when a topic is focused, lay down the rest in faint grey
-  if (MAP.focus != null) {
-    for (const [x, y, c, yr] of MAP.points) {
-      if (yr < yearMin || yr > yearMax) continue;
-      if (c === MAP.focus) continue;
-      put(sx(x), sy(y), 226, 226, 234);
-    }
+  // 3 layered passes: dimmed background, highlighted points, then emphasized (big) on top
+  for (const p of MAP.points) {
+    if (p[3] < yearMin || p[3] > yearMax) continue;
+    if (colorOf(p).hl) continue;
+    put(sx(p[0]), sy(p[1]), 226, 226, 234); shown++;
   }
-  // pass 2: colored points (focused topic, or everything)
-  for (const [x, y, c, yr] of MAP.points) {
-    if (yr < yearMin || yr > yearMax) continue;
-    shown++;
-    if (MAP.focus != null && c !== MAP.focus) continue;
-    const rgb = RGB[c] || (RGB[c] = clusterRGB(c));
-    put(sx(x), sy(y), rgb[0], rgb[1], rgb[2]);
+  for (const p of MAP.points) {
+    if (p[3] < yearMin || p[3] > yearMax) continue;
+    const k = colorOf(p); if (!k.hl || k.big) continue;
+    put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], false); shown++;
+  }
+  for (const p of MAP.points) {
+    if (p[3] < yearMin || p[3] > yearMax) continue;
+    const k = colorOf(p); if (!k.hl || !k.big) continue;
+    put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], true); shown++;
   }
   ctx.putImageData(img, 0, 0);
-  if (MAP.focus != null) {
+  if (cmode === "topic" && MAP.focus != null) {
     const cl = MAP.clusters.find(c => c.cluster === MAP.focus);
     if (cl) {
       ctx.fillStyle = "#1c1c28"; ctx.font = `600 ${13 * dpr}px -apple-system, sans-serif`;
@@ -214,9 +239,29 @@ function drawMap() {
 }
 function buildLegend() {
   const host = $("#legend"); host.innerHTML = "";
+  if (cmode === "condition") {
+    const ct = { 1: 0, 2: 0, 4: 0, multi: 0 };
+    for (const p of MAP.points) {
+      const m = p[4]; if (popcount(m) > 1) ct.multi++;
+      if (m & 1) ct[1]++; if (m & 2) ct[2]++; if (m & 4) ct[4]++;
+    }
+    const rows = COND_INFO.map(ci => ({ key: ci.m, label: ci.name, rgb: COND_RGB[ci.m], n: ct[ci.m] }))
+      .concat([{ key: "multi", label: "cross-condition", rgb: MULTI_RGB, n: ct.multi }]);
+    rows.forEach((r) => {
+      const el = document.createElement("div"); el.className = "legrow";
+      el.innerHTML = `<span class="swatch" style="background:rgb(${r.rgb.join(",")})"></span>
+        <span class="lab">${r.label}</span><span class="sz">${r.n.toLocaleString()}</span>`;
+      el.onclick = () => {
+        MAP.condFocus = MAP.condFocus === r.key ? null : r.key;
+        $$(".legrow", host).forEach((x, j) => x.classList.toggle("dim", MAP.condFocus != null && rows[j].key !== MAP.condFocus));
+        drawMap();
+      };
+      host.appendChild(el);
+    });
+    return;
+  }
   MAP.clusters.forEach(c => {
-    const row = document.createElement("div");
-    row.className = "legrow";
+    const row = document.createElement("div"); row.className = "legrow";
     row.innerHTML = `<span class="swatch" style="background:${clusterColor(c.cluster)}"></span>
       <span class="lab" title="${esc(c.label)}">${esc(c.label)}</span><span class="sz">${c.size}</span>`;
     row.onclick = () => {
@@ -228,4 +273,32 @@ function buildLegend() {
     host.appendChild(row);
   });
 }
+
+// color-mode toggle
+$$("#map-mode button").forEach(b => b.onclick = () => {
+  cmode = b.dataset.cm;
+  $$("#map-mode button").forEach(x => x.classList.toggle("on", x === b));
+  MAP.focus = null; MAP.condFocus = null;
+  drawMap(); buildLegend();
+});
+
+// click a dot -> open the nearest paper
+$("#mapcanvas").addEventListener("click", e => {
+  if (!MAP.tx) return;
+  const cv = e.currentTarget, rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (cv.width / rect.width);
+  const my = (e.clientY - rect.top) * (cv.height / rect.height);
+  const { minx, maxx, miny, maxy, W, H, pad, dpr } = MAP.tx;
+  const sx = x => pad + (x - minx) / (maxx - minx || 1) * (W - 2 * pad);
+  const sy = y => H - pad - (y - miny) / (maxy - miny || 1) * (H - 2 * pad);
+  let best = null, bd = Infinity;
+  for (const p of MAP.points) {
+    if (p[3] < yearMin || p[3] > yearMax) continue;
+    const dx = sx(p[0]) - mx, dy = sy(p[1]) - my, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = p; }
+  }
+  if (best && bd <= (9 * dpr) ** 2)
+    api(`/api/map/at?x=${best[0]}&y=${best[1]}`).then(r => { if (r.id) openPaper(r.id); });
+});
+
 window.addEventListener("resize", () => { if (mapLoaded && $("#panel-map").classList.contains("active")) drawMap(); });

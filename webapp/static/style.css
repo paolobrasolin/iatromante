@@ -75,8 +75,19 @@ button.go:hover { filter: brightness(1.05); }
 
 /* map */
 #map-time { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
-#map-time label b { color: var(--ink); }
-#map-time input[type=range] { width: 150px; accent-color: var(--accent); }
+#map-time > b { color: var(--ink); min-width: 36px; }
+.dual { position: relative; width: 240px; height: 26px; }
+.dual::before { content: ""; position: absolute; top: 11px; left: 0; right: 0; height: 4px;
+  background: var(--line); border-radius: 2px; }
+.dual .dual-band { position: absolute; top: 11px; height: 4px; background: var(--accent); border-radius: 2px; }
+.dual input[type=range] { position: absolute; top: 0; left: 0; width: 100%; height: 26px;
+  margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.dual input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto;
+  width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 2px solid var(--accent);
+  cursor: pointer; margin-top: 6px; }
+.dual input[type=range]::-moz-range-thumb { pointer-events: auto; width: 15px; height: 15px;
+  border-radius: 50%; background: #fff; border: 2px solid var(--accent); cursor: pointer; }
+#mapcanvas { cursor: pointer; }
 #mapwrap { display: grid; grid-template-columns: 1fr 260px; gap: 16px; }
 #mapcanvas { width: 100%; height: 560px; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); }

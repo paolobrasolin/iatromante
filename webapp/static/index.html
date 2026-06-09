@@ -49,12 +49,21 @@
 
     <!-- MAP -->
     <section class="panel" id="panel-map">
-      <div class="controls" id="map-chips"></div>
+      <div class="controls">
+        <div class="toggle" id="map-mode">
+          <button data-cm="topic" class="on">Topics</button>
+          <button data-cm="condition">Conditions</button>
+        </div>
+        <div id="map-chips" style="display:flex;gap:8px;"></div>
+      </div>
       <div id="map-time">
-        <label>From <b id="yr-from-lab"></b></label>
-        <input type="range" id="yr-from">
-        <input type="range" id="yr-to">
-        <label>to <b id="yr-to-lab"></b></label>
+        <b id="yr-from-lab"></b>
+        <div class="dual" id="yr-dual">
+          <div class="dual-band" id="yr-band"></div>
+          <input type="range" id="yr-from">
+          <input type="range" id="yr-to">
+        </div>
+        <b id="yr-to-lab"></b>
         <span class="spacer"></span>
         <span class="count" id="map-count"></span>
       </div>

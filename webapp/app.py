@@ -25,6 +25,14 @@ from feed.index import INDEX_PATH
 STATIC = Path(__file__).resolve().parent / "static"
 VECTORS_PATH = embed_mod.VECTORS_PATH
 PATHOLOGIES = ["endometriosis", "lipedema", "fibromyalgia"]
+PMASK = {"endometriosis": 1, "lipedema": 2, "fibromyalgia": 4}  # bitmask for the map
+
+
+def _mask(pathologies: str) -> int:
+    m = 0
+    for p in (pathologies or "").split(","):
+        m |= PMASK.get(p, 0)
+    return m
 
 app = FastAPI(title="iatromante")
 
@@ -173,11 +181,23 @@ def api_map(pathology: str | None = None):
         where = "WHERE p.pathologies LIKE '%'||?||'%'"
         params.append(pathology)
     rows = con.execute(
-        f"""SELECT m.x, m.y, m.cluster, p.year FROM paper_map m
+        f"""SELECT m.x, m.y, m.cluster, p.year, p.pathologies FROM paper_map m
             JOIN idx.papers p ON p.id = m.paper_id {where}""", params).fetchall()
     con.close()
-    points = [[round(r["x"], 2), round(r["y"], 2), r["cluster"], r["year"] or 0] for r in rows]
+    points = [[round(r["x"], 2), round(r["y"], 2), r["cluster"], r["year"] or 0,
+               _mask(r["pathologies"])] for r in rows]
     return {"points": points}
+
+
+@app.get("/api/map/at")
+def api_map_at(x: float, y: float):
+    """Nearest paper to a map coordinate (for click-to-open)."""
+    con = _vectors_db()
+    row = con.execute(
+        "SELECT paper_id FROM paper_map ORDER BY (x-?)*(x-?)+(y-?)*(y-?) LIMIT 1",
+        (x, x, y, y)).fetchone()
+    con.close()
+    return {"id": row["paper_id"] if row else None}
 
 
 @app.get("/")
