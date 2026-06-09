@@ -130,7 +130,8 @@ def cmd_embed(args) -> int:
 
 
 def cmd_cluster(args) -> int:
-    r = cluster_mod.build(method=args.method, k=args.k, min_cluster_size=args.min_cluster_size)
+    r = cluster_mod.build(method=args.method, k=args.k,
+                          min_cluster_size=args.min_cluster_size, min_samples=args.min_samples)
     noise = r.get("noise", 0)
     print(f"\nclustered {r['papers']} papers into {r['clusters']} topics "
           f"({noise} unclustered) via {args.method}")
@@ -259,6 +260,8 @@ def main(argv=None) -> int:
                     help="hdbscan finds the topic count from the data (default); kmeans uses --k")
     cl.add_argument("--min-cluster-size", type=int, default=500,
                     help="HDBSCAN: smallest group counted as a topic (default 500)")
+    cl.add_argument("--min-samples", type=int, default=5,
+                    help="HDBSCAN: lower = fewer points left unclustered (default 5)")
     cl.add_argument("--k", type=int, default=60, help="KMeans: number of topics (default 60)")
     cl.set_defaults(func=cmd_cluster)
 

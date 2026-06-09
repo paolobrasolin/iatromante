@@ -63,21 +63,26 @@ def _label_clusters(titles: list[str], labels: np.ndarray) -> dict[int, str]:
 
 
 def build(method: str = "hdbscan", k: int = 60, min_cluster_size: int = 500,
-          sample: int | None = None) -> dict:
+          min_samples: int = 5, cluster_dim: int = 5, sample: int | None = None) -> dict:
     from umap import UMAP
 
     ids, vecs, titles, paths = _load(sample)
     n = len(ids)
-    print(f"loaded {n} vectors; projecting to 2D (UMAP) ...", flush=True)
+    print(f"loaded {n} vectors; projecting to 2D (UMAP) for the map ...", flush=True)
     coords = UMAP(n_components=2, metric="cosine", n_neighbors=15,
                   min_dist=0.1, low_memory=True, verbose=False).fit_transform(vecs)
 
     if method == "hdbscan":
         import hdbscan
-        print(f"clustering (HDBSCAN, min_cluster_size={min_cluster_size}) ...", flush=True)
-        # cluster on the 2D layout so topics align with the visible blobs
-        labels = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=10,
-                                 core_dist_n_jobs=-1).fit_predict(coords.astype("float64"))
+        # Cluster on a higher-dim UMAP (more structure than 2D) so sub-themes inside
+        # the big fibromyalgia/endometriosis blobs separate. 2D is kept only for viz.
+        print(f"projecting to {cluster_dim}D for clustering ...", flush=True)
+        cl_coords = UMAP(n_components=cluster_dim, metric="cosine", n_neighbors=15,
+                         min_dist=0.0, low_memory=True, verbose=False).fit_transform(vecs)
+        print(f"clustering (HDBSCAN, min_cluster_size={min_cluster_size}, "
+              f"min_samples={min_samples}) ...", flush=True)
+        labels = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples,
+                                 core_dist_n_jobs=-1).fit_predict(cl_coords.astype("float64"))
     else:
         from sklearn.cluster import MiniBatchKMeans
         print(f"clustering into {k} topics (KMeans) ...", flush=True)
