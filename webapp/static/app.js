@@ -5,13 +5,30 @@ const PATHS = [];
 const sel = { ask: null, search: null, map: null }; // selected pathology per tab
 let MODE = "semantic";
 
-const clusterColor = (c) => c < 0 ? "#c9c9d4" : `hsl(${(c * 137.508) % 360} 58% 52%)`;
-function clusterRGB(c) {  // same hue as clusterColor, as [r,g,b] for the pixel buffer
-  if (c < 0) return [201, 201, 212];           // HDBSCAN noise / unclustered
-  const h = ((c * 137.508) % 360) / 360, s = 0.58, l = 0.52;
+function hslRGB(h, s, l) {  // h,s,l in [0,1] -> [r,g,b]
   const k = n => (n + h * 12) % 12;
   const f = n => l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
   return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+const macroHue = c => (c * 137.508) % 360;     // golden-angle hue per macro
+const clusterColor = (c) => c < 0 ? "#c9c9d4" : `hsl(${macroHue(c)} 58% 52%)`;
+const clusterRGB = (c) => c < 0 ? [201, 201, 212] : hslRGB(macroHue(c) / 360, 0.58, 0.52);
+
+// per-sub colors: macro's hue, lightness varied across its subs so they're distinguishable
+const SUBRGB = {}, MACRORGB = {};
+function buildColors() {
+  for (const k in SUBRGB) delete SUBRGB[k];
+  MAP.macros.forEach(m => {
+    const h = macroHue(m.cluster);
+    MACRORGB[m.cluster] = hslRGB(h / 360, 0.58, 0.52);
+    m._rgb = `hsl(${h} 58% 52%)`;
+    const n = m.subs.length;
+    m.subs.forEach((s, j) => {
+      const l = n > 1 ? 0.40 + 0.26 * (j / (n - 1)) : 0.52;   // 40%..66% within the hue
+      SUBRGB[s.cluster] = hslRGB(h / 360, 0.60, l);
+      s._rgb = `hsl(${h} 60% ${Math.round(l * 100)}%)`;
+    });
+  });
 }
 const esc = (s) => (s || "").replace(/[&<>]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
 
@@ -165,7 +182,7 @@ function loadMap() {
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
     MAP.points = m.points; MAP.macros = c.macros; MAP.focus = null; MAP.condFocus = null;
     view = { z: 1, ox: 0, oy: 0 };
-    computeBounds(); setupYearSlider(); drawMap(); buildLegend();
+    buildColors(); computeBounds(); setupYearSlider(); drawMap(); buildLegend();
   });
 }
 function computeBounds() {
@@ -211,7 +228,7 @@ function colorOf(p) {  // -> {rgb, hl, big};  p = [x,y,macro,sub,year,pmask,oa]
   const macro = p[2];
   let hl = true;
   if (MAP.focus) hl = MAP.focus.lvl === "macro" ? macro === MAP.focus.id : p[3] === MAP.focus.id;
-  return { rgb: RGB[macro] || (RGB[macro] = clusterRGB(macro)), hl, big: false };
+  return { rgb: SUBRGB[p[3]] || MACRORGB[macro] || clusterRGB(macro), hl, big: false };
 }
 function drawMap() {
   const cv = $("#mapcanvas"), dpr = window.devicePixelRatio || 1;
@@ -288,12 +305,11 @@ function buildLegend() {
     drawMap(); buildLegend();
   };
   MAP.macros.forEach(macro => {
-    const swatch = clusterColor(macro.cluster);
     const grp = document.createElement("div");
     const head = document.createElement("div");
     head.className = "legrow" + (focusEq("macro", macro.cluster) ? " active" : "");
     head.innerHTML = `<span class="caret">${macro._open ? "▾" : "▸"}</span>
-      <span class="swatch" style="background:${swatch}"></span>
+      <span class="swatch" style="background:${macro._rgb}"></span>
       <span class="lab" title="${esc(macro.label)}">${esc(macro.label)}</span>
       <span class="sz">${macro.size.toLocaleString()}</span>`;
     head.querySelector(".caret").onclick = (e) => { e.stopPropagation(); macro._open = !macro._open; buildLegend(); };
@@ -303,7 +319,7 @@ function buildLegend() {
       macro.subs.forEach(s => {
         const sr = document.createElement("div");
         sr.className = "legrow legsub" + (focusEq("sub", s.cluster) ? " active" : "");
-        sr.innerHTML = `<span class="swatch sm" style="background:${swatch}"></span>
+        sr.innerHTML = `<span class="swatch sm" style="background:${s._rgb}"></span>
           <span class="lab" title="${esc(s.label)}">${esc(s.label)}</span>
           <span class="sz">${s.size.toLocaleString()}</span>`;
         sr.onclick = () => setFocus("sub", s.cluster);
