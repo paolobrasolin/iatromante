@@ -5,8 +5,9 @@ const PATHS = [];
 const sel = { ask: null, search: null, map: null }; // selected pathology per tab
 let MODE = "semantic";
 
-const clusterColor = (c) => `hsl(${(c * 137.508) % 360} 58% 52%)`;
+const clusterColor = (c) => c < 0 ? "#c9c9d4" : `hsl(${(c * 137.508) % 360} 58% 52%)`;
 function clusterRGB(c) {  // same hue as clusterColor, as [r,g,b] for the pixel buffer
+  if (c < 0) return [201, 201, 212];           // HDBSCAN noise / unclustered
   const h = ((c * 137.508) % 360) / 360, s = 0.58, l = 0.52;
   const k = n => (n + h * 12) % 12;
   const f = n => l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));

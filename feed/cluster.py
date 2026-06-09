@@ -39,26 +39,31 @@ def _load(sample: int | None = None):
     return ids, np.ascontiguousarray(vecs), titles, paths
 
 
-def _label_clusters(titles: list[str], labels: np.ndarray, k: int) -> dict[int, str]:
+def _label_clusters(titles: list[str], labels: np.ndarray) -> dict[int, str]:
+    """Class-based TF-IDF label per cluster. Label -1 (HDBSCAN noise) is named."""
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    docs = ["" for _ in range(k)]
+    uniq = sorted({int(c) for c in labels if c >= 0})
+    docs = [""] * len(uniq)
+    pos = {c: i for i, c in enumerate(uniq)}
     for t, c in zip(titles, labels):
-        docs[c] += " " + t
-    vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2),
-                          max_features=8000, min_df=1)
+        if c >= 0:
+            docs[pos[int(c)]] += " " + t
+    out: dict[int, str] = {-1: "(unclustered)"}
+    if not uniq:
+        return out
+    vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), max_features=8000, min_df=1)
     mat = vec.fit_transform(docs)
     terms = vec.get_feature_names_out()
-    out = {}
-    for c in range(k):
-        row = mat[c].toarray().ravel()
-        top = [terms[i] for i in row.argsort()[::-1][:5] if row[i] > 0]
+    for c, i in pos.items():
+        row = mat[i].toarray().ravel()
+        top = [terms[j] for j in row.argsort()[::-1][:5] if row[j] > 0]
         out[c] = ", ".join(top) if top else f"cluster {c}"
     return out
 
 
-def build(k: int = 60, sample: int | None = None) -> dict:
-    from sklearn.cluster import MiniBatchKMeans
+def build(method: str = "hdbscan", k: int = 60, min_cluster_size: int = 500,
+          sample: int | None = None) -> dict:
     from umap import UMAP
 
     ids, vecs, titles, paths = _load(sample)
@@ -67,14 +72,23 @@ def build(k: int = 60, sample: int | None = None) -> dict:
     coords = UMAP(n_components=2, metric="cosine", n_neighbors=15,
                   min_dist=0.1, low_memory=True, verbose=False).fit_transform(vecs)
 
-    print(f"clustering into {k} topics (KMeans) ...", flush=True)
-    labels = MiniBatchKMeans(n_clusters=k, random_state=0, n_init=3,
-                             batch_size=4096).fit_predict(vecs)
+    if method == "hdbscan":
+        import hdbscan
+        print(f"clustering (HDBSCAN, min_cluster_size={min_cluster_size}) ...", flush=True)
+        # cluster on the 2D layout so topics align with the visible blobs
+        labels = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=10,
+                                 core_dist_n_jobs=-1).fit_predict(coords.astype("float64"))
+    else:
+        from sklearn.cluster import MiniBatchKMeans
+        print(f"clustering into {k} topics (KMeans) ...", flush=True)
+        labels = MiniBatchKMeans(n_clusters=k, random_state=0, n_init=3,
+                                 batch_size=4096).fit_predict(vecs)
 
     print("labeling topics ...", flush=True)
-    cluster_labels = _label_clusters(titles, labels, k)
+    cluster_labels = _label_clusters(titles, labels)
 
-    mix: dict[int, Counter] = {c: Counter() for c in range(k)}
+    present = sorted({int(c) for c in labels})
+    mix: dict[int, Counter] = {c: Counter() for c in present}
     for c, pth in zip(labels, paths):
         for p in pth.split(","):
             if p:
@@ -96,9 +110,12 @@ def build(k: int = 60, sample: int | None = None) -> dict:
     sizes = Counter(int(c) for c in labels)
     db.executemany(
         "INSERT INTO clusters VALUES (?,?,?,?)",
-        [(c, cluster_labels[c], sizes[c],
-          ", ".join(f"{p}:{n}" for p, n in mix[c].most_common())) for c in range(k)],
+        [(c, cluster_labels.get(c, f"cluster {c}"), sizes[c],
+          ", ".join(f"{p}:{m}" for p, m in mix[c].most_common())) for c in present],
     )
     db.commit()
     db.close()
-    return {"papers": n, "clusters": k, "labels": cluster_labels, "sizes": dict(sizes)}
+    n_topics = sum(1 for c in present if c >= 0)
+    noise = sizes.get(-1, 0)
+    return {"papers": n, "clusters": n_topics, "noise": noise,
+            "labels": cluster_labels, "sizes": dict(sizes)}

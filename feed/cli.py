@@ -130,10 +130,13 @@ def cmd_embed(args) -> int:
 
 
 def cmd_cluster(args) -> int:
-    r = cluster_mod.build(k=args.k)
+    r = cluster_mod.build(method=args.method, k=args.k, min_cluster_size=args.min_cluster_size)
+    noise = r.get("noise", 0)
     print(f"\nclustered {r['papers']} papers into {r['clusters']} topics "
-          f"(coords + labels in data/vectors.sqlite)")
+          f"({noise} unclustered) via {args.method}")
     for c in sorted(r["sizes"], key=lambda c: -r["sizes"][c])[:15]:
+        if c < 0:
+            continue
         print(f"  [{r['sizes'][c]:5d}] {r['labels'][c]}")
     return 0
 
@@ -252,7 +255,11 @@ def main(argv=None) -> int:
     e.set_defaults(func=cmd_embed)
 
     cl = sub.add_parser("cluster", help="topic-cluster + 2D-project the embeddings for the map")
-    cl.add_argument("--k", type=int, default=60, help="number of topics (default 60)")
+    cl.add_argument("--method", choices=["hdbscan", "kmeans"], default="hdbscan",
+                    help="hdbscan finds the topic count from the data (default); kmeans uses --k")
+    cl.add_argument("--min-cluster-size", type=int, default=500,
+                    help="HDBSCAN: smallest group counted as a topic (default 500)")
+    cl.add_argument("--k", type=int, default=60, help="KMeans: number of topics (default 60)")
     cl.set_defaults(func=cmd_cluster)
 
     cd = sub.add_parser("clean-dois", help="normalize/validate DOIs in the corpus, then reindex")
