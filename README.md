@@ -49,8 +49,46 @@ uv run feed search "deep infiltrating endometriosis MRI"
   - `--since 2020-01-01` — override the start date (does **not** move the watermark).
   - `--all` — fetch full history, ignoring watermarks.
 - `feed index` — (re)build `data/index.sqlite` (FTS5 full-text) from the corpus.
-- `feed search "<query>"` — full-text search the indexed corpus.
+- `feed search "<query>"` — search the corpus (`--semantic` for deep/vector search).
 - `feed stats` — counts by pathology / source / type, plus per-source watermarks.
+- `feed embed` — compute local semantic embeddings → `data/vectors.sqlite` (deep search).
+- `feed cluster [--k 60]` — topic-cluster + 2D-project the embeddings for the map.
+
+## Web app (browse / search / map)
+
+A self-hosted single-page UI lives in `webapp/` (FastAPI + vanilla JS, no build step).
+It reads the derived artifacts (`data/index.sqlite`, `data/vectors.sqlite`) and serves
+three tabs: **Ask** (plain-language → most-relevant papers), **Search** (semantic or
+keyword, condition filters), and **Map** (the topic-cluster landscape).
+
+```bash
+# prerequisites (once the corpus exists): build the derived artifacts
+uv run feed index      # keyword search + metadata/abstracts
+uv run feed embed      # semantic search vectors (local, on-device)
+uv run feed cluster    # topic clusters + 2D map coordinates
+
+# run the server
+uv run uvicorn webapp.app:app --host 0.0.0.0 --port 8077
+```
+
+The AI-answer summary is intentionally not wired yet: `/api/ask` returns the deep-search
+results with `answer: null` — a generated, cited summary drops in there later without any
+frontend change.
+
+### Deploying to your own server
+
+1. Clone the repo and `uv sync` on the server.
+2. Build the artifacts there (`feed index && feed embed && feed cluster`) **or** copy the
+   `data/*.sqlite` files over (the embedding model otherwise downloads ~130 MB on first run).
+3. Run uvicorn behind your reverse proxy (nginx/Caddy) with TLS; restrict access as needed
+   (this is health-adjacent reading — consider HTTP basic-auth or your usual gate).
+4. **Keep it current** with a daily job:
+   ```bash
+   feed fetch          # new papers (incremental once watermarks are set)
+   feed embed          # embed only the new ones (resumable)
+   feed index          # rebuild keyword index
+   feed cluster        # periodically (weekly) — re-cluster as the corpus grows
+   ```
 
 ## How it works
 
