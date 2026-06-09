@@ -142,7 +142,8 @@ const COND_INFO = [{ m: 1, name: "endometriosis" }, { m: 2, name: "lipedema" }, 
 const popcount = m => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
 let oaOnly = false;
 let view = { z: 1, ox: 0, oy: 0 };          // zoom + pan (pan offsets in device px)
-const visible = p => p[3] >= yearMin && p[3] <= yearMax && (!oaOnly || p[5]);
+// point tuple: [x, y, macro, sub, year, pmask, is_oa]
+const visible = p => p[4] >= yearMin && p[4] <= yearMax && (!oaOnly || p[6]);
 function makeProj(t) {
   const bx = x => t.pad + (x - t.minx) / (t.maxx - t.minx || 1) * (t.W - 2 * t.pad);
   const by = y => t.H - t.pad - (y - t.miny) / (t.maxy - t.miny || 1) * (t.H - 2 * t.pad);
@@ -162,7 +163,7 @@ function loadMap() {
   const u = new URL("/api/map", location.origin);
   if (sel.map) u.searchParams.set("pathology", sel.map);
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
-    MAP.points = m.points; MAP.clusters = c.clusters; MAP.focus = null; MAP.condFocus = null;
+    MAP.points = m.points; MAP.macros = c.macros; MAP.focus = null; MAP.condFocus = null;
     view = { z: 1, ox: 0, oy: 0 };
     computeBounds(); setupYearSlider(); drawMap(); buildLegend();
   });
@@ -183,7 +184,7 @@ function updateBand() {
 }
 function setupYearSlider() {
   let lo = Infinity, hi = -Infinity;
-  for (const p of MAP.points) { const y = p[3]; if (y > 1900) { if (y < lo) lo = y; if (y > hi) hi = y; } }
+  for (const p of MAP.points) { const y = p[4]; if (y > 1900) { if (y < lo) lo = y; if (y > hi) hi = y; } }
   if (!isFinite(lo)) { lo = 1950; hi = 2026; }
   const from = $("#yr-from"), to = $("#yr-to");
   from.min = to.min = lo; from.max = to.max = hi; from.value = lo; to.value = hi;
@@ -198,17 +199,19 @@ function setupYearSlider() {
   from.oninput = onInput; to.oninput = onInput;
   updateBand();
 }
-function colorOf(p) {  // -> {rgb, hl, big}
-  const c = p[2], mask = p[4];
+function colorOf(p) {  // -> {rgb, hl, big};  p = [x,y,macro,sub,year,pmask,oa]
   if (cmode === "condition") {
-    const multi = popcount(mask) > 1;
+    const mask = p[5], multi = popcount(mask) > 1;
     const rgb = multi ? MULTI_RGB : (COND_RGB[mask] || [200, 200, 208]);
     let hl = true;
     if (MAP.condFocus === "multi") hl = multi;
     else if (MAP.condFocus != null) hl = (mask & MAP.condFocus) > 0;
     return { rgb, hl, big: multi };
   }
-  return { rgb: RGB[c] || (RGB[c] = clusterRGB(c)), hl: MAP.focus == null || c === MAP.focus, big: false };
+  const macro = p[2];
+  let hl = true;
+  if (MAP.focus) hl = MAP.focus.lvl === "macro" ? macro === MAP.focus.id : p[3] === MAP.focus.id;
+  return { rgb: RGB[macro] || (RGB[macro] = clusterRGB(macro)), hl, big: false };
 }
 function drawMap() {
   const cv = $("#mapcanvas"), dpr = window.devicePixelRatio || 1;
@@ -242,8 +245,12 @@ function drawMap() {
     put(sx(p[0]), sy(p[1]), k.rgb[0], k.rgb[1], k.rgb[2], BS); shown++;
   }
   ctx.putImageData(img, 0, 0);
-  if (cmode === "topic" && MAP.focus != null) {
-    const cl = MAP.clusters.find(c => c.cluster === MAP.focus);
+  if (cmode === "topic" && MAP.focus) {
+    let cl = null;
+    for (const m of MAP.macros) {
+      if (MAP.focus.lvl === "macro" && m.cluster === MAP.focus.id) { cl = m; break; }
+      if (MAP.focus.lvl === "sub") { const s = m.subs.find(s => s.cluster === MAP.focus.id); if (s) { cl = s; break; } }
+    }
     if (cl) {
       ctx.fillStyle = "#1c1c28"; ctx.font = `600 ${13 * dpr}px -apple-system, sans-serif`;
       ctx.fillText(cl.label, sx(cl.cx) + 6, sy(cl.cy));
@@ -256,7 +263,7 @@ function buildLegend() {
   if (cmode === "condition") {
     const ct = { 1: 0, 2: 0, 4: 0, multi: 0 };
     for (const p of MAP.points) {
-      const m = p[4]; if (popcount(m) > 1) ct.multi++;
+      const m = p[5]; if (popcount(m) > 1) ct.multi++;
       if (m & 1) ct[1]++; if (m & 2) ct[2]++; if (m & 4) ct[4]++;
     }
     const rows = COND_INFO.map(ci => ({ key: ci.m, label: ci.name, rgb: COND_RGB[ci.m], n: ct[ci.m] }))
@@ -274,17 +281,36 @@ function buildLegend() {
     });
     return;
   }
-  MAP.clusters.forEach(c => {
-    const row = document.createElement("div"); row.className = "legrow";
-    row.innerHTML = `<span class="swatch" style="background:${clusterColor(c.cluster)}"></span>
-      <span class="lab" title="${esc(c.label)}">${esc(c.label)}</span><span class="sz">${c.size}</span>`;
-    row.onclick = () => {
-      MAP.focus = MAP.focus === c.cluster ? null : c.cluster;
-      $$(".legrow", host).forEach((r, i) =>
-        r.classList.toggle("dim", MAP.focus != null && MAP.clusters[i].cluster !== MAP.focus));
-      drawMap();
-    };
-    host.appendChild(row);
+  // topic mode: expandable macro -> sub tree
+  const focusEq = (lvl, id) => MAP.focus && MAP.focus.lvl === lvl && MAP.focus.id === id;
+  const setFocus = (lvl, id) => {
+    MAP.focus = focusEq(lvl, id) ? null : { lvl, id };
+    drawMap(); buildLegend();
+  };
+  MAP.macros.forEach(macro => {
+    const swatch = clusterColor(macro.cluster);
+    const grp = document.createElement("div");
+    const head = document.createElement("div");
+    head.className = "legrow" + (focusEq("macro", macro.cluster) ? " active" : "");
+    head.innerHTML = `<span class="caret">${macro._open ? "▾" : "▸"}</span>
+      <span class="swatch" style="background:${swatch}"></span>
+      <span class="lab" title="${esc(macro.label)}">${esc(macro.label)}</span>
+      <span class="sz">${macro.size.toLocaleString()}</span>`;
+    head.querySelector(".caret").onclick = (e) => { e.stopPropagation(); macro._open = !macro._open; buildLegend(); };
+    head.onclick = () => setFocus("macro", macro.cluster);
+    grp.appendChild(head);
+    if (macro._open) {
+      macro.subs.forEach(s => {
+        const sr = document.createElement("div");
+        sr.className = "legrow legsub" + (focusEq("sub", s.cluster) ? " active" : "");
+        sr.innerHTML = `<span class="swatch sm" style="background:${swatch}"></span>
+          <span class="lab" title="${esc(s.label)}">${esc(s.label)}</span>
+          <span class="sz">${s.size.toLocaleString()}</span>`;
+        sr.onclick = () => setFocus("sub", s.cluster);
+        grp.appendChild(sr);
+      });
+    }
+    host.appendChild(grp);
   });
 }
 
