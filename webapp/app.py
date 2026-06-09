@@ -160,13 +160,33 @@ def api_paper(paper_id: str):
 @app.get("/api/clusters")
 def api_clusters():
     con = _vectors_db()
-    rows = con.execute(
-        """SELECT c.cluster, c.label, c.size, c.pathology_mix,
-                  avg(m.x) AS cx, avg(m.y) AS cy
-           FROM clusters c JOIN paper_map m ON m.cluster = c.cluster
-           GROUP BY c.cluster ORDER BY c.size DESC""").fetchall()
+    clusters = con.execute(
+        "SELECT cluster, label, size, pathology_mix, parent, level FROM clusters").fetchall()
+    macro_c = {r["macro"]: (r["cx"], r["cy"]) for r in con.execute(
+        "SELECT macro, avg(x) AS cx, avg(y) AS cy FROM paper_map GROUP BY macro")}
+    sub_c = {r["cluster"]: (r["cx"], r["cy"]) for r in con.execute(
+        "SELECT cluster, avg(x) AS cx, avg(y) AS cy FROM paper_map GROUP BY cluster")}
     con.close()
-    return {"clusters": [dict(r) for r in rows]}
+
+    macros, subs = {}, []
+    for r in clusters:
+        if r["level"] == 1:
+            cx, cy = macro_c.get(r["cluster"], (0, 0))
+            macros[r["cluster"]] = {"cluster": r["cluster"], "label": r["label"],
+                                    "size": r["size"], "mix": r["pathology_mix"],
+                                    "cx": cx, "cy": cy, "subs": []}
+        else:
+            cx, cy = sub_c.get(r["cluster"], (0, 0))
+            subs.append((r["parent"], {"cluster": r["cluster"], "label": r["label"],
+                                       "size": r["size"], "mix": r["pathology_mix"],
+                                       "cx": cx, "cy": cy}))
+    for parent, s in subs:
+        if parent in macros:
+            macros[parent]["subs"].append(s)
+    out = sorted(macros.values(), key=lambda m: -m["size"])
+    for m in out:
+        m["subs"].sort(key=lambda s: -s["size"])
+    return {"macros": out}
 
 
 @app.get("/api/map")
@@ -181,10 +201,11 @@ def api_map(pathology: str | None = None):
         where = "WHERE p.pathologies LIKE '%'||?||'%'"
         params.append(pathology)
     rows = con.execute(
-        f"""SELECT m.x, m.y, m.cluster, p.year, p.pathologies, p.is_oa FROM paper_map m
+        f"""SELECT m.x, m.y, m.macro, m.cluster, p.year, p.pathologies, p.is_oa FROM paper_map m
             JOIN idx.papers p ON p.id = m.paper_id {where}""", params).fetchall()
     con.close()
-    points = [[round(r["x"], 2), round(r["y"], 2), r["cluster"], r["year"] or 0,
+    # [x, y, macro, sub, year, pmask, is_oa]
+    points = [[round(r["x"], 2), round(r["y"], 2), r["macro"], r["cluster"], r["year"] or 0,
                _mask(r["pathologies"]), int(r["is_oa"] or 0)] for r in rows]
     return {"points": points}
 

@@ -130,15 +130,15 @@ def cmd_embed(args) -> int:
 
 
 def cmd_cluster(args) -> int:
-    r = cluster_mod.build(method=args.method, k=args.k,
-                          min_cluster_size=args.min_cluster_size, min_samples=args.min_samples)
-    noise = r.get("noise", 0)
-    print(f"\nclustered {r['papers']} papers into {r['clusters']} topics "
-          f"({noise} unclustered) via {args.method}")
-    for c in sorted(r["sizes"], key=lambda c: -r["sizes"][c])[:15]:
-        if c < 0:
-            continue
-        print(f"  [{r['sizes'][c]:5d}] {r['labels'][c]}")
+    r = cluster_mod.build(macro_k=args.macro_k, sub_min=args.sub_min, min_samples=args.min_samples)
+    print(f"\nclustered {r['papers']} papers into {r['macros']} macro-topics "
+          f"/ {r['subs']} sub-topics")
+    for m in sorted(r["macro_sizes"], key=lambda c: -r["macro_sizes"][c]):
+        print(f"\n[{r['macro_sizes'][m]:6d}] {r['macro_labels'][m]}")
+        subs = sorted([s for s, p in r["sub_parent"].items() if p == m],
+                      key=lambda s: -r["sub_sizes"][s])
+        for s in subs[:6]:
+            print(f"     {r['sub_sizes'][s]:6d}  └ {r['sub_labels'][s]}")
     return 0
 
 
@@ -255,14 +255,11 @@ def main(argv=None) -> int:
     e.add_argument("--limit", type=int, help="cap number of papers embedded this run")
     e.set_defaults(func=cmd_embed)
 
-    cl = sub.add_parser("cluster", help="topic-cluster + 2D-project the embeddings for the map")
-    cl.add_argument("--method", choices=["hdbscan", "kmeans"], default="hdbscan",
-                    help="hdbscan finds the topic count from the data (default); kmeans uses --k")
-    cl.add_argument("--min-cluster-size", type=int, default=500,
-                    help="HDBSCAN: smallest group counted as a topic (default 500)")
-    cl.add_argument("--min-samples", type=int, default=5,
-                    help="HDBSCAN: lower = fewer points left unclustered (default 5)")
-    cl.add_argument("--k", type=int, default=60, help="KMeans: number of topics (default 60)")
+    cl = sub.add_parser("cluster", help="hierarchical topic clustering + 2D map projection")
+    cl.add_argument("--macro-k", type=int, default=12, help="number of broad macro-topics (default 12)")
+    cl.add_argument("--sub-min", type=int, default=300,
+                    help="smallest sub-topic within a macro (HDBSCAN min_cluster_size, default 300)")
+    cl.add_argument("--min-samples", type=int, default=5, help="HDBSCAN min_samples (default 5)")
     cl.set_defaults(func=cmd_cluster)
 
     cd = sub.add_parser("clean-dois", help="normalize/validate DOIs in the corpus, then reindex")
