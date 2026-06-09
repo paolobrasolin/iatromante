@@ -15,6 +15,7 @@ from pathlib import Path
 
 import yaml
 
+from . import embed as embed_mod
 from . import fulltext as fulltext_mod
 from . import index as index_mod
 from . import openaccess as openaccess_mod
@@ -118,6 +119,13 @@ def cmd_resolve_oa(args) -> int:
     return 0
 
 
+def cmd_embed(args) -> int:
+    stats = embed_mod.build(limit=args.limit)
+    print(f"\nembeddings: {stats['embedded']} newly embedded "
+          f"({stats['already']} already present) -> {embed_mod.VECTORS_PATH}")
+    return 0
+
+
 def cmd_index(args) -> int:
     n = index_mod.build()
     print(f"indexed {n} papers -> {index_mod.INDEX_PATH}")
@@ -125,6 +133,17 @@ def cmd_index(args) -> int:
 
 
 def cmd_search(args) -> int:
+    pathology = args.pathology[0] if args.pathology else None
+    if args.semantic:
+        hits = embed_mod.search(args.query, k=args.limit, pathology=pathology)
+        if not hits:
+            print("no matches")
+            return 0
+        for h in hits:
+            tags = f" [{h['pathologies']}]" if h["pathologies"] else ""
+            print(f"\n• [{h['score']}] {h['title']} ({h['year']}, {h['type']}){tags}")
+            print(f"  {h['url']}")
+        return 0
     hits = index_mod.search(args.query, limit=args.limit)
     if not hits:
         print("no matches")
@@ -184,11 +203,17 @@ def main(argv=None) -> int:
     ro.add_argument("--limit", type=int, help="cap number of DOIs checked this run")
     ro.set_defaults(func=cmd_resolve_oa)
 
+    e = sub.add_parser("embed", help="compute local semantic embeddings (deep search) into data/vectors.sqlite")
+    e.add_argument("--limit", type=int, help="cap number of papers embedded this run")
+    e.set_defaults(func=cmd_embed)
+
     i = sub.add_parser("index", help="(re)build the SQLite/FTS5 search index")
     i.set_defaults(func=cmd_index)
 
-    s = sub.add_parser("search", help="full-text search the corpus")
+    s = sub.add_parser("search", help="search the corpus (keyword by default, --semantic for deep search)")
     s.add_argument("query")
+    s.add_argument("--semantic", "-s", action="store_true", help="semantic/vector search instead of keyword")
+    s.add_argument("--pathology", action="append", help="limit to this pathology")
     s.add_argument("--limit", type=int, default=20)
     s.set_defaults(func=cmd_search)
 
