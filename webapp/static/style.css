@@ -1,0 +1,101 @@
+:root {
+  --bg: #fbfbfd; --panel: #ffffff; --ink: #1c1c28; --muted: #6b6b7b;
+  --line: #e6e6ef; --accent: #2f7d78; --accent-soft: #e3f1ef;
+  --endo: #c2547a; --lip: #c98a2b; --fibro: #6a5acd; --shadow: 0 1px 3px rgba(20,20,40,.06);
+  --radius: 12px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+header {
+  padding: 22px 24px 0; max-width: 980px; margin: 0 auto;
+}
+.brand { display: flex; align-items: baseline; gap: 12px; }
+.brand h1 { font-size: 22px; margin: 0; letter-spacing: -.02em; }
+.brand .count { color: var(--muted); font-size: 14px; }
+.tagline { color: var(--muted); font-size: 14px; margin: 4px 0 16px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab {
+  border: 0; background: none; padding: 10px 16px; font-size: 15px; cursor: pointer;
+  color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+main { max-width: 980px; margin: 0 auto; padding: 20px 24px 80px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+.searchbar { display: flex; gap: 8px; margin-bottom: 12px; }
+input[type=text], textarea {
+  flex: 1; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px;
+  font: inherit; background: var(--panel); color: var(--ink); resize: vertical;
+}
+textarea { min-height: 64px; }
+button.go {
+  border: 0; background: var(--accent); color: #fff; border-radius: var(--radius);
+  padding: 0 20px; font: inherit; font-weight: 600; cursor: pointer;
+}
+button.go:hover { filter: brightness(1.05); }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.chip {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
+  padding: 5px 13px; font-size: 13px; cursor: pointer; color: var(--muted);
+}
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.toggle { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.toggle button { border: 0; background: var(--panel); padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
+.toggle button.on { background: var(--accent); color: #fff; }
+.spacer { flex: 1; }
+
+.note { background: #fff7ed; border: 1px solid #fde6c8; color: #8a5a16; padding: 10px 14px;
+  border-radius: var(--radius); font-size: 14px; margin-bottom: 14px; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); cursor: pointer;
+}
+.card:hover { border-color: #cdd; }
+.card h3 { margin: 0 0 4px; font-size: 16.5px; line-height: 1.35; }
+.card .meta { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.card .snip { font-size: 14px; color: #3a3a48; }
+.card .snip b { background: #fff2a8; font-weight: 600; }
+.tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pill { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; color: #fff; font-weight: 600; }
+.pill.endometriosis { background: var(--endo); }
+.pill.lipedema { background: var(--lip); }
+.pill.fibromyalgia { background: var(--fibro); }
+.pill.oa { background: var(--accent); }
+.pill.score { background: #ececf4; color: var(--muted); }
+
+.empty, .loading { color: var(--muted); padding: 30px 0; text-align: center; }
+
+/* map */
+#mapwrap { display: grid; grid-template-columns: 1fr 260px; gap: 16px; }
+#mapcanvas { width: 100%; height: 560px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); }
+#legend { max-height: 560px; overflow-y: auto; font-size: 13px; }
+.legrow { display: flex; align-items: center; gap: 7px; padding: 3px 4px; cursor: pointer; border-radius: 6px; }
+.legrow:hover { background: #f1f1f7; }
+.legrow.dim { opacity: .35; }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.legrow .lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.legrow .sz { color: var(--muted); margin-left: auto; padding-left: 6px; }
+
+/* detail modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(20,20,40,.4); display: none;
+  align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+.modal-bg.open { display: flex; }
+.modal { background: var(--panel); border-radius: 14px; max-width: 720px; width: 100%;
+  padding: 26px 28px; box-shadow: 0 10px 40px rgba(20,20,40,.25); }
+.modal h2 { margin: 0 0 6px; font-size: 20px; line-height: 1.3; }
+.modal .meta { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+.modal .abstract { font-size: 15px; white-space: pre-wrap; }
+.modal .links { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+.modal a.btn { text-decoration: none; border: 1px solid var(--accent); color: var(--accent);
+  padding: 7px 14px; border-radius: 8px; font-size: 14px; }
+.modal a.btn.primary { background: var(--accent); color: #fff; }
+.modal .close { float: right; border: 0; background: none; font-size: 22px; cursor: pointer; color: var(--muted); }

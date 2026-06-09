@@ -22,8 +22,8 @@ def build() -> int:
         """
         CREATE TABLE papers (
             id TEXT PRIMARY KEY, title TEXT, abstract TEXT, doi TEXT, pmid TEXT,
-            venue TEXT, pub_date TEXT, year INTEGER, type TEXT, url TEXT,
-            is_oa INTEGER, pathologies TEXT, sources TEXT
+            authors TEXT, venue TEXT, pub_date TEXT, year INTEGER, type TEXT, url TEXT,
+            full_text_url TEXT, is_oa INTEGER, pathologies TEXT, sources TEXT
         );
         CREATE VIRTUAL TABLE papers_fts USING fts5(
             title, abstract, content='papers', content_rowid='rowid'
@@ -39,10 +39,11 @@ def build() -> int:
                     continue
                 p = json.loads(line)
                 con.execute(
-                    "INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (p["id"], p["title"], p["abstract"], p.get("doi"), p.get("pmid"),
-                     p.get("venue"), p.get("pub_date"), p.get("year"), p.get("type"),
-                     p.get("url"), int(p.get("is_oa", False)),
+                     "; ".join(p.get("authors", [])), p.get("venue"), p.get("pub_date"),
+                     p.get("year"), p.get("type"), p.get("url"), p.get("full_text_url"),
+                     int(p.get("is_oa", False)),
                      ",".join(p.get("pathologies", [])), ",".join(p.get("sources", []))),
                 )
                 n += 1

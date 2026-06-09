@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iatromante · literature</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>iatromante</h1>
+      <span class="count" id="count"></span>
+    </div>
+    <p class="tagline">Endometriosis · lipedema · fibromyalgia — the literature, searchable.</p>
+    <nav class="tabs">
+      <button class="tab active" data-tab="ask">Ask</button>
+      <button class="tab" data-tab="search">Search</button>
+      <button class="tab" data-tab="map">Map</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ASK -->
+    <section class="panel active" id="panel-ask">
+      <div class="searchbar">
+        <textarea id="ask-q" placeholder="Ask in plain language — e.g. “what helps fatigue in fibromyalgia?”"></textarea>
+        <button class="go" id="ask-go">Ask</button>
+      </div>
+      <div class="controls" id="ask-chips"></div>
+      <div id="ask-results"></div>
+    </section>
+
+    <!-- SEARCH -->
+    <section class="panel" id="panel-search">
+      <div class="searchbar">
+        <input type="text" id="search-q" placeholder="Search the literature…">
+        <button class="go" id="search-go">Search</button>
+      </div>
+      <div class="controls">
+        <div class="toggle" id="mode-toggle">
+          <button data-mode="semantic" class="on">Smart</button>
+          <button data-mode="keyword">Keyword</button>
+        </div>
+        <div id="search-chips" style="display:flex;gap:8px;"></div>
+      </div>
+      <div id="search-results"></div>
+    </section>
+
+    <!-- MAP -->
+    <section class="panel" id="panel-map">
+      <div class="controls" id="map-chips"></div>
+      <div id="mapwrap">
+        <canvas id="mapcanvas"></canvas>
+        <div id="legend"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

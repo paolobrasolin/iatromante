@@ -26,6 +26,18 @@ QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 MIN_ABSTRACT = 100
 
 
+_MODEL = None
+
+
+def _model():
+    """Lazily load and cache the embedding model (load once, reuse — e.g. a server)."""
+    global _MODEL
+    if _MODEL is None:
+        from fastembed import TextEmbedding
+        _MODEL = TextEmbedding(model_name=MODEL_NAME)
+    return _MODEL
+
+
 def _connect() -> sqlite3.Connection:
     db = sqlite3.connect(VECTORS_PATH)
     db.enable_load_extension(True)
@@ -52,8 +64,6 @@ def _doc_text(p: dict) -> str:
 
 
 def build(limit: int | None = None, batch_size: int = 256) -> dict:
-    from fastembed import TextEmbedding
-
     db = _connect()
     existing = {r[0] for r in db.execute("SELECT paper_id FROM vec_papers")}
 
@@ -77,7 +87,7 @@ def build(limit: int | None = None, batch_size: int = 256) -> dict:
         db.close()
         return stats
 
-    model = TextEmbedding(model_name=MODEL_NAME)
+    model = _model()
     buf_meta: list[dict] = []
     buf_text: list[str] = []
 
@@ -113,12 +123,9 @@ def build(limit: int | None = None, batch_size: int = 256) -> dict:
 
 
 def search(query: str, k: int = 20, pathology: str | None = None) -> list[dict]:
-    from fastembed import TextEmbedding
-
     if not VECTORS_PATH.exists():
         raise FileNotFoundError("no vector store -- run `feed embed` first")
-    model = TextEmbedding(model_name=MODEL_NAME)
-    qvec = next(iter(model.embed([QUERY_PREFIX + query]))).tolist()
+    qvec = next(iter(_model().embed([QUERY_PREFIX + query]))).tolist()
 
     db = _connect()
     # over-fetch when filtering by pathology, since KNN can't pre-filter aux columns
