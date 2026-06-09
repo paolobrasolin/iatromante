@@ -162,22 +162,21 @@ def api_clusters():
 
 
 @app.get("/api/map")
-def api_map(pathology: str | None = None, sample: int = 14000):
-    # deterministic downsample for smooth rendering; cluster labels come from full data.
-    # pathology filter joins the index DB (paper_map has no pathology column).
+def api_map(pathology: str | None = None):
+    # All embedded papers, each as [x, y, cluster, year]. The client renders via a
+    # pixel buffer (fast enough for the full set) and filters by year live.
     con = _vectors_db()
+    con.execute("ATTACH DATABASE ? AS idx", (f"file:{INDEX_PATH}?mode=ro",))
+    where = ""
+    params: list = []
     if pathology:
-        con.execute("ATTACH DATABASE ? AS idx", (f"file:{INDEX_PATH}?mode=ro",))
-        rows = con.execute(
-            """SELECT m.x, m.y, m.cluster FROM paper_map m
-               JOIN idx.papers p ON p.id = m.paper_id
-               WHERE p.pathologies LIKE '%'||?||'%'
-               ORDER BY m.paper_id LIMIT ?""", (pathology, sample)).fetchall()
-    else:
-        rows = con.execute(
-            "SELECT x, y, cluster FROM paper_map ORDER BY paper_id LIMIT ?", (sample,)).fetchall()
+        where = "WHERE p.pathologies LIKE '%'||?||'%'"
+        params.append(pathology)
+    rows = con.execute(
+        f"""SELECT m.x, m.y, m.cluster, p.year FROM paper_map m
+            JOIN idx.papers p ON p.id = m.paper_id {where}""", params).fetchall()
     con.close()
-    points = [[round(r["x"], 3), round(r["y"], 3), r["cluster"]] for r in rows]
+    points = [[round(r["x"], 2), round(r["y"], 2), r["cluster"], r["year"] or 0] for r in rows]
     return {"points": points}
 
 

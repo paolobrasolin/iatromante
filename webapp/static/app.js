@@ -6,6 +6,12 @@ const sel = { ask: null, search: null, map: null }; // selected pathology per ta
 let MODE = "semantic";
 
 const clusterColor = (c) => `hsl(${(c * 137.508) % 360} 58% 52%)`;
+function clusterRGB(c) {  // same hue as clusterColor, as [r,g,b] for the pixel buffer
+  const h = ((c * 137.508) % 360) / 360, s = 0.58, l = 0.52;
+  const k = n => (n + h * 12) % 12;
+  const f = n => l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
 const esc = (s) => (s || "").replace(/[&<>]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
 
 // ---- bootstrap ----------------------------------------------------------
@@ -124,44 +130,87 @@ $("#modal-bg").onclick = (e) => { if (e.target.id === "modal-bg") closeModal(); 
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
 // ---- map ----------------------------------------------------------------
-let mapLoaded = false, MAP = { points: [], clusters: [], focus: null, bounds: null };
+let mapLoaded = false;
+let MAP = { points: [], clusters: [], focus: null, bounds: null };
+let yearMin = 0, yearMax = 9999;
+const RGB = {};  // cluster -> [r,g,b] cache
+
 function loadMap() {
   mapLoaded = true;
+  $("#mapcanvas").parentElement && ($("#map-count").textContent = "loading…");
   const u = new URL("/api/map", location.origin);
   if (sel.map) u.searchParams.set("pathology", sel.map);
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
     MAP.points = m.points; MAP.clusters = c.clusters; MAP.focus = null;
-    computeBounds(); drawMap(); buildLegend();
+    computeBounds(); setupYearSlider(); drawMap(); buildLegend();
   });
 }
 function computeBounds() {
   let a = Infinity, b = -Infinity, cc = Infinity, d = -Infinity;
-  MAP.points.forEach(([x, y]) => { a = Math.min(a, x); b = Math.max(b, x); cc = Math.min(cc, y); d = Math.max(d, y); });
+  for (const [x, y] of MAP.points) {
+    if (x < a) a = x; if (x > b) b = x; if (y < cc) cc = y; if (y > d) d = y;
+  }
   MAP.bounds = { minx: a, maxx: b, miny: cc, maxy: d };
+}
+function setupYearSlider() {
+  let lo = Infinity, hi = -Infinity;
+  for (const p of MAP.points) { const y = p[3]; if (y > 1900) { if (y < lo) lo = y; if (y > hi) hi = y; } }
+  if (!isFinite(lo)) { lo = 1950; hi = 2026; }
+  const from = $("#yr-from"), to = $("#yr-to");
+  from.min = to.min = lo; from.max = to.max = hi;
+  from.value = lo; to.value = hi;
+  yearMin = lo; yearMax = hi;
+  $("#yr-from-lab").textContent = lo; $("#yr-to-lab").textContent = hi;
+  const onInput = () => {
+    yearMin = Math.min(+from.value, +to.value);
+    yearMax = Math.max(+from.value, +to.value);
+    $("#yr-from-lab").textContent = yearMin; $("#yr-to-lab").textContent = yearMax;
+    drawMap();
+  };
+  from.oninput = onInput; to.oninput = onInput;
 }
 function drawMap() {
   const cv = $("#mapcanvas"), dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth, h = cv.clientHeight;
-  cv.width = w * dpr; cv.height = h * dpr;
-  const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
-  const { minx, maxx, miny, maxy } = MAP.bounds, pad = 16;
-  const sx = (x) => pad + (x - minx) / (maxx - minx || 1) * (w - 2 * pad);
-  const sy = (y) => h - pad - (y - miny) / (maxy - miny || 1) * (h - 2 * pad);
-  for (const [x, y, c] of MAP.points) {
-    const focused = MAP.focus == null || MAP.focus === c;
-    ctx.globalAlpha = focused ? 0.7 : 0.06;
-    ctx.fillStyle = clusterColor(c);
-    ctx.beginPath(); ctx.arc(sx(x), sy(y), focused ? 2.2 : 1.6, 0, 6.283); ctx.fill();
+  cv.width = cv.clientWidth * dpr; cv.height = cv.clientHeight * dpr;
+  const W = cv.width, H = cv.height, ctx = cv.getContext("2d");
+  const img = ctx.createImageData(W, H), buf = img.data;
+  const { minx, maxx, miny, maxy } = MAP.bounds, pad = 8 * dpr;
+  const sx = x => pad + (x - minx) / (maxx - minx || 1) * (W - 2 * pad);
+  const sy = y => H - pad - (y - miny) / (maxy - miny || 1) * (H - 2 * pad);
+  const put = (px, py, r, g, b) => {
+    px |= 0; py |= 0;
+    for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) {
+      const X = px + dx, Y = py + dy;
+      if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+      const i = (Y * W + X) * 4; buf[i] = r; buf[i + 1] = g; buf[i + 2] = b; buf[i + 3] = 255;
+    }
+  };
+  let shown = 0;
+  // pass 1: when a topic is focused, lay down the rest in faint grey
+  if (MAP.focus != null) {
+    for (const [x, y, c, yr] of MAP.points) {
+      if (yr < yearMin || yr > yearMax) continue;
+      if (c === MAP.focus) continue;
+      put(sx(x), sy(y), 226, 226, 234);
+    }
   }
-  ctx.globalAlpha = 1;
+  // pass 2: colored points (focused topic, or everything)
+  for (const [x, y, c, yr] of MAP.points) {
+    if (yr < yearMin || yr > yearMax) continue;
+    shown++;
+    if (MAP.focus != null && c !== MAP.focus) continue;
+    const rgb = RGB[c] || (RGB[c] = clusterRGB(c));
+    put(sx(x), sy(y), rgb[0], rgb[1], rgb[2]);
+  }
+  ctx.putImageData(img, 0, 0);
   if (MAP.focus != null) {
     const cl = MAP.clusters.find(c => c.cluster === MAP.focus);
     if (cl) {
-      ctx.fillStyle = "#1c1c28"; ctx.font = "600 13px -apple-system, sans-serif";
+      ctx.fillStyle = "#1c1c28"; ctx.font = `600 ${13 * dpr}px -apple-system, sans-serif`;
       ctx.fillText(cl.label, sx(cl.cx) + 6, sy(cl.cy));
     }
   }
+  $("#map-count").textContent = shown.toLocaleString() + " papers";
 }
 function buildLegend() {
   const host = $("#legend"); host.innerHTML = "";
