@@ -9,6 +9,28 @@ from typing import Optional
 
 _NONALNUM = re.compile(r"[^a-z0-9]+")
 _WS = re.compile(r"\s+")
+_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
+_DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/",
+                 "http://dx.doi.org/", "doi.org/", "doi:")
+
+
+def clean_doi(raw: Optional[str]) -> Optional[str]:
+    """Normalize a DOI to bare ``10.xxxx/...`` form, or None if it isn't a valid DOI.
+
+    Strips URL/``doi:`` prefixes and stray leading slashes, lowercases (DOIs are
+    case-insensitive). Upstream sources occasionally emit non-DOI identifiers
+    (SciELO PIDs, journal-internal ids); those return None so links can fall back.
+    """
+    if not raw:
+        return None
+    d = raw.strip()
+    low = d.lower()
+    for pre in _DOI_PREFIXES:
+        if low.startswith(pre):
+            d = d[len(pre):]
+            break
+    d = d.strip().lstrip("/").strip().lower()
+    return d if _DOI_RE.match(d) else None
 
 
 def norm_title(title: str) -> str:

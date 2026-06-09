@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -20,9 +21,10 @@ from . import embed as embed_mod
 from . import fulltext as fulltext_mod
 from . import index as index_mod
 from . import openaccess as openaccess_mod
+from .models import clean_doi
 from .sources import DEFAULT_SOURCES, REGISTRY
 from .sources.base import make_client
-from .store import Corpus, load_state, save_state
+from .store import CORPUS_PATH, Corpus, load_state, save_state
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "pathologies.yaml"
 
@@ -136,6 +138,38 @@ def cmd_cluster(args) -> int:
     return 0
 
 
+def cmd_clean_dois(args) -> int:
+    tmp = CORPUS_PATH.with_suffix(".jsonl.tmp")
+    total = fixed = nulled = 0
+    with CORPUS_PATH.open(encoding="utf-8") as fh, tmp.open("w", encoding="utf-8") as out:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            p = json.loads(line)
+            total += 1
+            old = p.get("doi")
+            new = clean_doi(old)
+            if new != old:
+                p["doi"] = new
+                url = p.get("url", "") or ""
+                if "doi.org/" in url:  # the broken doi was the link target -> repair/fallback
+                    if new:
+                        p["url"] = f"https://doi.org/{new}"
+                    elif p.get("pmid"):
+                        p["url"] = f"https://pubmed.ncbi.nlm.nih.gov/{p['pmid']}/"
+                    else:
+                        p["url"] = ""
+                nulled += new is None
+                fixed += new is not None
+            out.write(json.dumps(p, ensure_ascii=False, sort_keys=True) + "\n")
+    tmp.replace(CORPUS_PATH)
+    print(f"scanned {total}; normalized {fixed}, nulled {nulled} invalid DOIs")
+    print("rebuilding index ...")
+    print(f"reindexed {index_mod.build()} papers")
+    return 0
+
+
 def cmd_index(args) -> int:
     n = index_mod.build()
     print(f"indexed {n} papers -> {index_mod.INDEX_PATH}")
@@ -220,6 +254,9 @@ def main(argv=None) -> int:
     cl = sub.add_parser("cluster", help="topic-cluster + 2D-project the embeddings for the map")
     cl.add_argument("--k", type=int, default=60, help="number of topics (default 60)")
     cl.set_defaults(func=cmd_cluster)
+
+    cd = sub.add_parser("clean-dois", help="normalize/validate DOIs in the corpus, then reindex")
+    cd.set_defaults(func=cmd_clean_dois)
 
     i = sub.add_parser("index", help="(re)build the SQLite/FTS5 search index")
     i.set_defaults(func=cmd_index)

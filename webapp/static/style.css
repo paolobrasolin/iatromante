@@ -82,11 +82,13 @@ button.go:hover { filter: brightness(1.05); }
 .dual .dual-band { position: absolute; top: 11px; height: 4px; background: var(--accent); border-radius: 2px; }
 .dual input[type=range] { position: absolute; top: 0; left: 0; width: 100%; height: 26px;
   margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.dual input[type=range]::-webkit-slider-runnable-track { height: 4px; background: transparent; border: none; }
 .dual input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto;
-  width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 2px solid var(--accent);
-  cursor: pointer; margin-top: 6px; }
-.dual input[type=range]::-moz-range-thumb { pointer-events: auto; width: 15px; height: 15px;
-  border-radius: 50%; background: #fff; border: 2px solid var(--accent); cursor: pointer; }
+  box-sizing: border-box; width: 15px; height: 15px; border-radius: 50%; background: #fff;
+  border: 2px solid var(--accent); cursor: pointer; margin-top: -5.5px; }
+.dual input[type=range]::-moz-range-track { height: 4px; background: transparent; border: none; }
+.dual input[type=range]::-moz-range-thumb { pointer-events: auto; box-sizing: border-box;
+  width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 2px solid var(--accent); cursor: pointer; }
 #mapcanvas { cursor: pointer; }
 #mapwrap { display: grid; grid-template-columns: 1fr 260px; gap: 16px; }
 #mapcanvas { width: 100%; height: 560px; background: var(--panel); border: 1px solid var(--line);
