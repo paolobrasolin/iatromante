@@ -1,0 +1,18 @@
+# Local testing:  docker compose up --build
+#
+# Builds the image from the local Dockerfile and bind-mounts the local data/
+# dir (with vectors.sqlite + corpus.jsonl) into the container. The FTS
+# index.sqlite is rebuilt on start from corpus.jsonl if missing.
+#
+# For production deployment on Swarm, use docker-stack.yml instead.
+
+services:
+  app:
+    build: .
+    image: iatromante:local
+    ports:
+      - "8077:8077"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8077
