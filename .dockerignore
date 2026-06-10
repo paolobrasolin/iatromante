@@ -1,0 +1,10 @@
+# keep the build context (and image) small — data is mounted, not baked in
+data/
+.venv/
+.direnv/
+.git/
+__pycache__/
+*.pyc
+.env
+/tmp/
+*.log

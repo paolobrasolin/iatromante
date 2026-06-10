@@ -1,0 +1,28 @@
+# Docker Swarm stack:  docker stack deploy -c docker-stack.yml iatromante
+#
+# Before first deploy, populate the data volume with the corpus + embeddings.
+# On a single-node swarm the named volume lives at
+#   /var/lib/docker/volumes/iatromante_data/_data
+# Copy vectors.sqlite (+ corpus.jsonl) there, or bind-mount a host dir instead.
+
+version: "3.8"
+
+services:
+  app:
+    image: ghcr.io/OWNER/iatromante:latest   # <- set OWNER (your GitHub user/org)
+    ports:
+      - "8077:8077"
+    volumes:
+      - data:/app/data
+    environment:
+      - PORT=8077
+      # - DATA_PULL_CMD=feed pull-data   # optional: fetch the bundle on first boot
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      update_config:
+        order: start-first
+
+volumes:
+  data:
