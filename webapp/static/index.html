@@ -38,31 +38,30 @@
 
     <!-- MAP -->
     <section class="panel" id="panel-map">
-      <div class="controls">
-        <div class="toggle" id="map-mode">
-          <button data-cm="topic" class="on">Topics</button>
-          <button data-cm="condition">Conditions</button>
-        </div>
-        <span class="spacer"></span>
-        <label id="oa-toggle"><input type="checkbox" id="oa-only"> open access only</label>
-      </div>
-      <div id="map-time">
-        <b id="yr-from-lab"></b>
-        <div class="dual" id="yr-dual">
-          <div class="dual-band" id="yr-band"></div>
-          <input type="range" id="yr-from">
-          <input type="range" id="yr-to">
-        </div>
-        <b id="yr-to-lab"></b>
-        <span class="spacer"></span>
-        <span class="count" id="map-count"></span>
-      </div>
       <div id="mapwrap">
         <div id="mapview">
           <canvas id="mapcanvas"></canvas>
           <button id="map-reset" title="Reset zoom & pan">reset view</button>
         </div>
-        <div id="legend"></div>
+        <aside id="map-side">
+          <div id="map-controls">
+            <span class="count" id="map-count"></span>
+            <div id="map-time">
+              <div class="dual" id="yr-dual">
+                <div class="dual-band" id="yr-band"></div>
+                <input type="range" id="yr-from">
+                <input type="range" id="yr-to">
+              </div>
+              <div class="yr-labs"><b id="yr-from-lab"></b><b id="yr-to-lab"></b></div>
+            </div>
+            <label id="oa-toggle"><input type="checkbox" id="oa-only"> open access only</label>
+            <div class="toggle" id="map-mode">
+              <button data-cm="topic" class="on">Topics</button>
+              <button data-cm="condition">Conditions</button>
+            </div>
+          </div>
+          <div id="legend"></div>
+        </aside>
       </div>
       <p class="maphint">Scroll to zoom · drag to pan · click a dot to open it</p>
     </section>
