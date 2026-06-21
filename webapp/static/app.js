@@ -2,7 +2,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const api = (p) => fetch(p).then(r => r.json());
 const PATHS = [];
-const sel = { ask: null, search: null }; // selected pathology per tab (ask/search)
+const sel = { search: null }; // selected pathology per tab
 let MODE = "semantic";
 
 function hslRGB(h, s, l) {  // h,s,l in [0,1] -> [r,g,b]
@@ -36,7 +36,6 @@ const esc = (s) => (s || "").replace(/[&<>]/g, m => ({ "&": "&amp;", "<": "&lt;"
 api("/api/meta").then(m => {
   $("#count").textContent = m.total.toLocaleString() + " papers";
   PATHS.push(...m.pathologies);
-  buildChips("#ask-chips", "ask");
   buildChips("#search-chips", "search");
 });
 
@@ -77,27 +76,6 @@ function renderCards(host, results) {
       <div class="snip">${r.snippet || ""}</div><div class="tags">${tags}</div>`;
     div.onclick = () => openPaper(r.id);
     host.appendChild(div);
-  });
-}
-
-// ---- ask ----------------------------------------------------------------
-$("#ask-go").onclick = doAsk;
-$("#ask-q").addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doAsk(); });
-function doAsk() {
-  const q = $("#ask-q").value.trim();
-  if (!q) return;
-  const host = $("#ask-results");
-  host.innerHTML = '<div class="loading">Searching…</div>';
-  fetch("/api/ask", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ q, pathology: sel.ask })
-  }).then(r => r.json()).then(d => {
-    const note = `<div class="note">Showing the most relevant papers for your question.
-      A written, cited summary will land here later — for now, open any paper to read it.</div>`;
-    host.innerHTML = note;
-    const wrap = document.createElement("div");
-    host.appendChild(wrap);
-    renderCards(wrap, d.results);
   });
 }
 

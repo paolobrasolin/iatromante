@@ -4,9 +4,8 @@ Reads the derived artifacts built by the `feed` pipeline:
   data/index.sqlite    -- FTS5 keyword search + paper metadata/abstracts
   data/vectors.sqlite  -- embeddings (semantic search) + map coords + clusters
 
-Serves a small single-page UI (Ask / Search / Map). The Ask tab returns deep
-(semantic) search results today; the AI-summary seam (/api/ask -> answer) is
-stubbed so a generated summary can drop in later without frontend changes.
+Serves a small single-page UI (Search / Map). Search offers both keyword
+(FTS5) and semantic (embedding) modes over the same corpus.
 """
 
 from __future__ import annotations
@@ -114,21 +113,6 @@ def api_search(q: str = Query(...), mode: str = "semantic",
     finally:
         con.close()
     return {"mode": mode, "results": results}
-
-
-@app.post("/api/ask")
-def api_ask(payload: dict):
-    """Deep-search now; generated answer is the future seam (answer stays null)."""
-    q = (payload.get("q") or "").strip()
-    pathology = payload.get("pathology")
-    if not q:
-        return {"answer": None, "results": []}
-    hits = embed_mod.search(q, k=payload.get("limit", 15), pathology=pathology)
-    con = _index_db()
-    meta = _meta_for(con, [h["id"] for h in hits])
-    con.close()
-    results = [_card(meta[h["id"]], score=h["score"]) for h in hits if h["id"] in meta]
-    return {"answer": None, "answer_enabled": False, "results": results}
 
 
 @app.get("/api/paper/{paper_id:path}")
