@@ -2,7 +2,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const api = (p) => fetch(p).then(r => r.json());
 const PATHS = [];
-const sel = { ask: null, search: null, map: null }; // selected pathology per tab
+const sel = { ask: null, search: null }; // selected pathology per tab (ask/search)
 let MODE = "semantic";
 
 function hslRGB(h, s, l) {  // h,s,l in [0,1] -> [r,g,b]
@@ -38,7 +38,6 @@ api("/api/meta").then(m => {
   PATHS.push(...m.pathologies);
   buildChips("#ask-chips", "ask");
   buildChips("#search-chips", "search");
-  buildChips("#map-chips", "map");
 });
 
 function buildChips(sel_, tab) {
@@ -50,7 +49,6 @@ function buildChips(sel_, tab) {
     c.onclick = () => {
       sel[tab] = sel[tab] === p ? null : p;
       $$(".chip", host).forEach(x => x.classList.toggle("on", x.dataset.path === sel[tab]));
-      if (tab === "map") loadMap();
     };
     host.appendChild(c);
   });
@@ -149,7 +147,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 
 // ---- map ----------------------------------------------------------------
 let mapLoaded = false;
-let MAP = { points: [], clusters: [], focus: null, condFocus: null, bounds: null, tx: null };
+let MAP = { points: [], clusters: [], focus: null, condSel: new Set(), bounds: null, tx: null };
 let yearMin = 0, yearMax = 9999;
 let cmode = "topic";                                   // "topic" | "condition"
 const RGB = {};                                        // cluster -> [r,g,b] cache
@@ -178,9 +176,8 @@ function loadMap() {
   mapLoaded = true;
   $("#map-count").textContent = "loading…";
   const u = new URL("/api/map", location.origin);
-  if (sel.map) u.searchParams.set("pathology", sel.map);
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
-    MAP.points = m.points; MAP.macros = c.macros; MAP.focus = null; MAP.condFocus = null;
+    MAP.points = m.points; MAP.macros = c.macros; MAP.focus = null; MAP.condSel = new Set();
     view = { z: 1, ox: 0, oy: 0 };
     buildColors(); computeBounds(); setupYearSlider(); drawMap(); buildLegend();
   });
@@ -212,6 +209,7 @@ function setupYearSlider() {
     yearMax = Math.max(+from.value, +to.value);
     $("#yr-from-lab").textContent = yearMin; $("#yr-to-lab").textContent = yearMax;
     updateBand(); drawMap();
+    if (cmode === "condition") buildLegend();   // overlap counts track the year window
   };
   from.oninput = onInput; to.oninput = onInput;
   updateBand();
@@ -220,9 +218,8 @@ function colorOf(p) {  // -> {rgb, hl, big};  p = [x,y,macro,sub,year,pmask,oa]
   if (cmode === "condition") {
     const mask = p[5], multi = popcount(mask) > 1;
     const rgb = multi ? MULTI_RGB : (COND_RGB[mask] || [200, 200, 208]);
-    let hl = true;
-    if (MAP.condFocus === "multi") hl = multi;
-    else if (MAP.condFocus != null) hl = (mask & MAP.condFocus) > 0;
+    // no selection -> everything lit; otherwise only the selected exact-set regions
+    const hl = MAP.condSel.size === 0 ? true : MAP.condSel.has(mask);
     return { rgb, hl, big: multi };
   }
   const macro = p[2];
@@ -277,27 +274,61 @@ function drawMap() {
   }
   $("#map-count").textContent = shown.toLocaleString() + " papers";
 }
+// toggle a group of exact-set masks in/out of the selection (all-or-nothing for the group)
+function toggleCond(masks) {
+  if (!masks.length) return;
+  const all = masks.every(mk => MAP.condSel.has(mk));
+  masks.forEach(mk => all ? MAP.condSel.delete(mk) : MAP.condSel.add(mk));
+  drawMap(); buildLegend();
+}
+// one panel row: dot-matrix (members) + label + proportional bar + count
+function condRow(host, masks, members, count, max, condRGBcss) {
+  const sel = MAP.condSel, lit = masks.filter(mk => sel.has(mk)).length;
+  const row = document.createElement("div");
+  row.className = "legrow uprow"
+    + (lit && lit === masks.length ? " active" : "")
+    + (sel.size && !lit ? " dim" : "");
+  const dots = COND_INFO.map(ci => members & ci.m
+    ? `<span class="cdot on" style="background:${condRGBcss(ci.m)};border-color:${condRGBcss(ci.m)}"></span>`
+    : `<span class="cdot"></span>`).join("");
+  const label = COND_INFO.filter(ci => members & ci.m).map(ci => ci.name).join(" + ") || "untagged";
+  const pct = max ? Math.max(3, Math.round(count / max * 100)) : 0;
+  row.innerHTML = `<span class="barfill" style="width:${pct}%"></span>
+    <span class="cdots">${dots}</span>
+    <span class="lab" title="${esc(label)}">${esc(label)}</span>
+    <span class="sz">${count.toLocaleString()}</span>`;
+  if (masks.length) row.onclick = () => toggleCond(masks);
+  host.appendChild(row);
+}
 function buildLegend() {
   const host = $("#legend"); host.innerHTML = "";
   if (cmode === "condition") {
-    const ct = { 1: 0, 2: 0, 4: 0, multi: 0 };
+    // counts over the currently-visible points, grouped by EXACT condition set (pmask)
+    const exact = new Map();                 // mask -> count (disjoint regions)
+    const totals = {};                       // bit  -> count (condition mentioned anywhere)
+    COND_INFO.forEach(ci => totals[ci.m] = 0);
     for (const p of MAP.points) {
-      const m = p[5]; if (popcount(m) > 1) ct.multi++;
-      if (m & 1) ct[1]++; if (m & 2) ct[2]++; if (m & 4) ct[4]++;
+      if (!visible(p)) continue;
+      const m = p[5]; if (!m) continue;      // skip untagged points
+      exact.set(m, (exact.get(m) || 0) + 1);
+      COND_INFO.forEach(ci => { if (m & ci.m) totals[ci.m]++; });
     }
-    const rows = COND_INFO.map(ci => ({ key: ci.m, label: ci.name, rgb: COND_RGB[ci.m], n: ct[ci.m] }))
-      .concat([{ key: "multi", label: "cross-condition", rgb: MULTI_RGB, n: ct.multi }]);
-    rows.forEach((r) => {
-      const el = document.createElement("div"); el.className = "legrow";
-      el.innerHTML = `<span class="swatch" style="background:rgb(${r.rgb.join(",")})"></span>
-        <span class="lab">${r.label}</span><span class="sz">${r.n.toLocaleString()}</span>`;
-      el.onclick = () => {
-        MAP.condFocus = MAP.condFocus === r.key ? null : r.key;
-        $$(".legrow", host).forEach((x, j) => x.classList.toggle("dim", MAP.condFocus != null && rows[j].key !== MAP.condFocus));
-        drawMap();
-      };
-      host.appendChild(el);
-    });
+    const condRGBcss = m => `rgb(${(COND_RGB[m] || [200, 200, 208]).join(",")})`;
+    const present = [...exact.keys()];
+
+    // section 1 — each condition (any mention): selects all of its regions as a group
+    const h1 = document.createElement("div"); h1.className = "leghdr"; h1.textContent = "by condition";
+    host.appendChild(h1);
+    const totMax = Math.max(1, ...COND_INFO.map(ci => totals[ci.m]));
+    COND_INFO.forEach(ci =>
+      condRow(host, present.filter(mk => mk & ci.m), ci.m, totals[ci.m], totMax, condRGBcss));
+
+    // section 2 — exact regions, sorted by size so the heaviest overlaps surface first
+    const h2 = document.createElement("div"); h2.className = "leghdr"; h2.textContent = "by overlap";
+    host.appendChild(h2);
+    const rows = [...exact.entries()].sort((a, b) => b[1] - a[1]);
+    const exMax = Math.max(1, ...rows.map(r => r[1]));
+    rows.forEach(([mask, count]) => condRow(host, [mask], mask, count, exMax, condRGBcss));
     return;
   }
   // topic mode: expandable macro -> sub tree
@@ -336,7 +367,7 @@ function buildLegend() {
 $$("#map-mode button").forEach(b => b.onclick = () => {
   cmode = b.dataset.cm;
   $$("#map-mode button").forEach(x => x.classList.toggle("on", x === b));
-  MAP.focus = null; MAP.condFocus = null;
+  MAP.focus = null; MAP.condSel = new Set();
   drawMap(); buildLegend();
 });
 
@@ -385,6 +416,6 @@ window.addEventListener("mousemove", e => {
 window.addEventListener("mouseup", () => { dragging = false; });
 
 $("#map-reset").onclick = () => { view = { z: 1, ox: 0, oy: 0 }; drawMap(); };
-$("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); };
+$("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); if (cmode === "condition") buildLegend(); };
 
 window.addEventListener("resize", () => { if (mapLoaded && $("#panel-map").classList.contains("active")) drawMap(); });

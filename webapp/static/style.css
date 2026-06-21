@@ -113,6 +113,19 @@ button.go:hover { filter: brightness(1.05); }
 .legrow .lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .legrow .sz { color: var(--muted); margin-left: auto; padding-left: 6px; }
 
+/* condition panel (UpSet-style): dot-matrix membership + size bar */
+.leghdr { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); margin: 12px 4px 3px; }
+.leghdr:first-child { margin-top: 0; }
+.uprow { position: relative; overflow: hidden; }
+.uprow > :not(.barfill) { position: relative; z-index: 1; }
+.uprow .barfill { position: absolute; left: 0; top: 1px; bottom: 1px; z-index: 0;
+  background: var(--accent-soft); border-radius: 6px; }
+.uprow.active .barfill { background: transparent; }
+.cdots { display: inline-flex; gap: 3px; flex: none; }
+.cdot { width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box;
+  border: 1.5px solid var(--line); background: transparent; }
+
 /* detail modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(20,20,40,.4); display: none;
   align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
