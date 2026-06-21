@@ -8,7 +8,7 @@ Docker deployment.
 
 A **continuously-updatable, in-repo corpus** of the biomedical literature on three
 pathologies — **endometriosis, lipedema (incl. UK spelling *lipoedema*), and
-fibromyalgia** — plus a **self-hosted web app** (Ask / Search / Map) to browse and
+fibromyalgia** — plus a **self-hosted web app** (Search / Map) to browse and
 search it. Everything runs locally; embeddings are computed on-device.
 
 **Why:** the maintainer's partner lives with these three (frequently co-occurring)
@@ -21,8 +21,8 @@ substitute for a care team.
 - **Corpus:** 208,082 unique papers (full historical backfill). `data/` is gitignored.
 - **Search:** keyword (FTS5) + semantic/"deep" (local embeddings) — both working.
 - **Map:** hierarchical topic map (12 macro-topics / 120 sub-topics), fully featured.
-- **Web app:** runs locally (`uvicorn webapp.app:app`, port 8077). Ask tab returns
-  deep-search results; the AI-summary answer is **stubbed** (seam ready).
+- **Web app:** runs locally (`uvicorn webapp.app:app`, port 8077). Search (keyword +
+  semantic) and the topic/condition map; a generated AI summary is not yet built.
 - **Deployment:** Dockerfile + Swarm stack + GHCR workflow built and verified; **not
   yet pushed/deployed**.
 - **Data sharing:** decided on **private Hugging Face Hub**; sync commands **not yet built**.

@@ -63,13 +63,11 @@ pathologies[], sources[], source_ids{}, fetched_at`.
 
 ## Web app (`webapp/`, FastAPI + vanilla JS, no build step)
 
-Three tabs: **Ask / Search / Map**.
+Two tabs: **Search / Map**.
 
 Endpoints (`webapp/app.py`):
 - `GET /api/meta` → totals + pathologies
 - `GET /api/search?q&mode=semantic|keyword&pathology&limit`
-- `POST /api/ask {q, pathology}` → `{answer: null, results: [...]}` — **AI summary is a
-  stub**; deep-search results returned now. This is the seam for a future model.
 - `GET /api/paper/{id}` → full detail (+ topic label)
 - `GET /api/clusters` → nested `{macros: [{...subs: [...]}]}`
 - `GET /api/map?pathology` → points `[x, y, macro, sub, year, pmask, is_oa]` (all 168k)

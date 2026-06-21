@@ -10,7 +10,7 @@
 - **Embeddings** (`feed embed`) — 168,046 vectors, local.
 - **Hierarchical clustering** (`feed cluster`) — 12 macro / 120 sub, full coverage.
 - **FTS index** (`feed index`) — rebuilt over full corpus (carries authors + full_text_url).
-- **Web app** — Ask / Search / Map, fully featured map (zoom/pan, year slider, OA filter,
+- **Web app** — Search / Map, fully featured map (zoom/pan, year slider, OA filter,
   Topics/Conditions modes, expandable legend, sub-shading, click-to-open).
 - **Deployment scaffolding** — Dockerfile, Swarm stack, GHCR workflow; built + smoke-tested.
 
@@ -26,9 +26,10 @@
 
 1. **Finish deploying** (see [deployment.md](deployment.md)): set image owner, push tag,
    get data onto the server, **reverse proxy + TLS + auth gate**, then `docker stack deploy`.
-2. **AI answers** — wire a model into the `/api/ask` seam so the Ask tab returns a written,
-   **cited** summary over retrieved papers. Options: **Mistral API** (key already in `.env`)
-   or a local LLM. `answer` is currently always `null` by design — just fill it.
+2. **AI answers** — add a new endpoint + UI that returns a written, **cited** summary over
+   the semantic-search results for a question. Options: **Mistral API** (key already in
+   `.env`) or a local LLM. (The earlier `/api/ask` stub was removed with the Ask tab; this
+   would be built fresh on top of the existing semantic search.)
 3. **Automate updates** — daily `fetch → embed → index` (+ weekly `cluster`). Set watermarks.
 4. **Full-text at scale (legitimate)** — run OA **text** extraction across the corpus
    (~2 GB), store as local files + embed. Optionally add a **publisher TDM API** fetcher if

@@ -58,8 +58,8 @@ uv run feed search "deep infiltrating endometriosis MRI"
 
 A self-hosted single-page UI lives in `webapp/` (FastAPI + vanilla JS, no build step).
 It reads the derived artifacts (`data/index.sqlite`, `data/vectors.sqlite`) and serves
-three tabs: **Ask** (plain-language → most-relevant papers), **Search** (semantic or
-keyword, condition filters), and **Map** (the topic-cluster landscape).
+two tabs: **Search** (semantic or keyword, condition filters) and **Map** (the
+topic-cluster landscape).
 
 ```bash
 # prerequisites (once the corpus exists): build the derived artifacts
@@ -71,9 +71,8 @@ uv run feed cluster    # topic clusters + 2D map coordinates
 uv run uvicorn webapp.app:app --host 0.0.0.0 --port 8077
 ```
 
-The AI-answer summary is intentionally not wired yet: `/api/ask` returns the deep-search
-results with `answer: null` — a generated, cited summary drops in there later without any
-frontend change.
+Semantic ("deep") search is available via Search's **Smart** mode. A generated, cited
+AI summary over retrieved papers is a planned addition, not yet built.
 
 ### Deploying to your own server
 
