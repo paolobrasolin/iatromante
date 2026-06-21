@@ -172,11 +172,24 @@ function computeBounds() {
   MAP.bounds = { minx: a, maxx: b, miny: cc, maxy: d };
 }
 function updateBand() {
-  const from = $("#yr-from"), to = $("#yr-to");
+  const from = $("#yr-from"), to = $("#yr-to"), band = $("#yr-band");
   const lo = +from.min, span = (+from.max - lo) || 1;
   const a = Math.min(+from.value, +to.value), b = Math.max(+from.value, +to.value);
-  $("#yr-band").style.left = (a - lo) / span * 100 + "%";
-  $("#yr-band").style.width = (b - a) / span * 100 + "%";
+  // map to thumb-center px: thumbs travel inset by half their 15px width, so the band edges
+  // (and its centered handle) line up with the round thumbs rather than the full track width
+  const trav = ($("#yr-dual").clientWidth || 0) - 15;
+  const x = v => 7.5 + (v - lo) / span * trav;
+  band.style.left = x(a) + "px";
+  band.style.width = (x(b) - x(a)) + "px";
+}
+// re-read the slider inputs and refresh everything keyed to the year window
+function applyYear() {
+  const from = $("#yr-from"), to = $("#yr-to");
+  yearMin = Math.min(+from.value, +to.value);
+  yearMax = Math.max(+from.value, +to.value);
+  $("#yr-from-lab").textContent = yearMin; $("#yr-to-lab").textContent = yearMax;
+  updateBand(); drawMap(); drawHist();
+  if (cmode === "condition") buildLegend();   // overlap counts track the year window
 }
 function setupYearSlider() {
   let lo = Infinity, hi = -Infinity;
@@ -190,14 +203,7 @@ function setupYearSlider() {
   MAP.histLo = lo; MAP.histN = hi - lo + 1;
   MAP.histFull = new Array(MAP.histN).fill(0);
   for (const p of MAP.points) { const i = p[4] - lo; if (i >= 0 && i < MAP.histN) MAP.histFull[i]++; }
-  const onInput = () => {
-    yearMin = Math.min(+from.value, +to.value);
-    yearMax = Math.max(+from.value, +to.value);
-    $("#yr-from-lab").textContent = yearMin; $("#yr-to-lab").textContent = yearMax;
-    updateBand(); drawMap(); drawHist();
-    if (cmode === "condition") buildLegend();   // overlap counts track the year window
-  };
-  from.oninput = onInput; to.oninput = onInput;
+  from.oninput = applyYear; to.oninput = applyYear;
   updateBand();
 }
 function colorOf(p) {  // -> {rgb, hl, big};  p = [x,y,macro,sub,year,pmask,oa]
@@ -428,5 +434,32 @@ window.addEventListener("mouseup", () => { dragging = false; });
 $("#map-reset").onclick = () => { view = { z: 1, ox: 0, oy: 0 }; drawMap(); };
 $("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); drawHist(); if (cmode === "condition") buildLegend(); };
 $("#hist-scale").onclick = e => { histLog = !histLog; e.currentTarget.textContent = histLog ? "log" : "linear"; e.currentTarget.classList.toggle("on", histLog); drawHist(); };
+
+// drag the band to slide the whole window (both ends together), preserving its width
+(() => {
+  const band = $("#yr-band"), dual = $("#yr-dual");
+  let startX = 0, startLo = 0, width = 0, bandDrag = false;
+  band.addEventListener("mousedown", e => {
+    const from = $("#yr-from"), to = $("#yr-to");
+    bandDrag = true; startX = e.clientX;
+    startLo = Math.min(+from.value, +to.value);
+    width = Math.abs(+to.value - +from.value);
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", e => {
+    if (!bandDrag) return;
+    const from = $("#yr-from"), to = $("#yr-to");
+    const lo = +from.min, hi = +from.max, trav = (dual.clientWidth || 16) - 15;
+    const dy = Math.round((e.clientX - startX) / trav * (hi - lo));
+    const nlo = Math.max(lo, Math.min(hi - width, startLo + dy));
+    from.value = nlo; to.value = nlo + width;
+    applyYear();
+  });
+  window.addEventListener("mouseup", () => {
+    if (!bandDrag) return;
+    bandDrag = false; document.body.style.userSelect = "";
+  });
+})();
 
 window.addEventListener("resize", () => { if (mapLoaded && $("#panel-map").classList.contains("active")) { drawMap(); drawHist(); } });
