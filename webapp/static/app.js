@@ -135,6 +135,10 @@ const COND_INFO = [{ m: 1, name: "endometriosis" }, { m: 2, name: "lipedema" }, 
 const popcount = m => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
 let oaOnly = false;
 let view = { z: 1, ox: 0, oy: 0 };          // zoom + pan (pan offsets in device px)
+// year-histogram colors: shadow = full corpus distribution, fill = current filter result
+const HIST_BG = "#dcdce4";
+const HIST_SEL = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2f7d78";
+let histLog = true;                         // histogram vertical scale: log (default, the skew is exponential) vs linear
 // point tuple: [x, y, macro, sub, year, pmask, is_oa]
 const visible = p => p[4] >= yearMin && p[4] <= yearMax && (!oaOnly || p[6]);
 function makeProj(t) {
@@ -157,7 +161,7 @@ function loadMap() {
   Promise.all([api(u), api("/api/clusters")]).then(([m, c]) => {
     MAP.points = m.points; MAP.macros = c.macros; MAP.focus = null; MAP.condSel = new Set();
     view = { z: 1, ox: 0, oy: 0 };
-    buildColors(); computeBounds(); setupYearSlider(); drawMap(); buildLegend();
+    buildColors(); computeBounds(); setupYearSlider(); drawMap(); drawHist(); buildLegend();
   });
 }
 function computeBounds() {
@@ -182,11 +186,15 @@ function setupYearSlider() {
   from.min = to.min = lo; from.max = to.max = hi; from.value = lo; to.value = hi;
   yearMin = lo; yearMax = hi;
   $("#yr-from-lab").textContent = lo; $("#yr-to-lab").textContent = hi;
+  // full per-year distribution — the fixed "shadow" layer behind the histogram
+  MAP.histLo = lo; MAP.histN = hi - lo + 1;
+  MAP.histFull = new Array(MAP.histN).fill(0);
+  for (const p of MAP.points) { const i = p[4] - lo; if (i >= 0 && i < MAP.histN) MAP.histFull[i]++; }
   const onInput = () => {
     yearMin = Math.min(+from.value, +to.value);
     yearMax = Math.max(+from.value, +to.value);
     $("#yr-from-lab").textContent = yearMin; $("#yr-to-lab").textContent = yearMax;
-    updateBand(); drawMap();
+    updateBand(); drawMap(); drawHist();
     if (cmode === "condition") buildLegend();   // overlap counts track the year window
   };
   from.oninput = onInput; to.oninput = onInput;
@@ -252,12 +260,36 @@ function drawMap() {
   }
   $("#map-count").textContent = shown.toLocaleString() + " papers";
 }
+// year histogram above the slider: full distribution (shadow) + current filter result (accent),
+// both normalized to the full peak so the accent fill reads as the selected share of each year.
+function drawHist() {
+  const cv = $("#yr-hist"); if (!cv || !MAP.histFull) return;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = cv.clientWidth * dpr; cv.height = cv.clientHeight * dpr;
+  const W = cv.width, H = cv.height, ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, W, H);
+  const lo = MAP.histLo, n = MAP.histN, full = MAP.histFull;
+  const sel = new Array(n).fill(0);            // per-year counts passing ALL current filters
+  for (const p of MAP.points) {
+    if (!visible(p) || !colorOf(p).hl) continue;
+    const i = p[4] - lo; if (i >= 0 && i < n) sel[i]++;
+  }
+  let max = 1; for (let i = 0; i < n; i++) if (full[i] > max) max = full[i];
+  const denom = (histLog ? Math.log1p(max) : max) || 1;   // shared scale so both layers stay comparable
+  const yh = v => (histLog ? Math.log1p(v) : v) / denom * H;
+  const slot = W / n, bw = Math.max(dpr, slot - (slot > 3 * dpr ? dpr : 0));
+  for (let i = 0; i < n; i++) {
+    const x = i * slot;
+    if (full[i]) { const h = yh(full[i]); ctx.fillStyle = HIST_BG;  ctx.fillRect(x, H - h, bw, h); }
+    if (sel[i])  { const h = yh(sel[i]);  ctx.fillStyle = HIST_SEL; ctx.fillRect(x, H - h, bw, h); }
+  }
+}
 // toggle a group of exact-set masks in/out of the selection (all-or-nothing for the group)
 function toggleCond(masks) {
   if (!masks.length) return;
   const all = masks.every(mk => MAP.condSel.has(mk));
   masks.forEach(mk => all ? MAP.condSel.delete(mk) : MAP.condSel.add(mk));
-  drawMap(); buildLegend();
+  drawMap(); drawHist(); buildLegend();
 }
 // one panel row: dot-matrix (members) + label + proportional bar + count
 function condRow(host, masks, members, count, max, condRGBcss) {
@@ -313,7 +345,7 @@ function buildLegend() {
   const focusEq = (lvl, id) => MAP.focus && MAP.focus.lvl === lvl && MAP.focus.id === id;
   const setFocus = (lvl, id) => {
     MAP.focus = focusEq(lvl, id) ? null : { lvl, id };
-    drawMap(); buildLegend();
+    drawMap(); drawHist(); buildLegend();
   };
   MAP.macros.forEach(macro => {
     const grp = document.createElement("div");
@@ -346,7 +378,7 @@ $$("#map-mode button").forEach(b => b.onclick = () => {
   cmode = b.dataset.cm;
   $$("#map-mode button").forEach(x => x.classList.toggle("on", x === b));
   MAP.focus = null; MAP.condSel = new Set();
-  drawMap(); buildLegend();
+  drawMap(); drawHist(); buildLegend();
 });
 
 // ---- map interaction: click-to-open, zoom, pan -------------------------
@@ -394,6 +426,7 @@ window.addEventListener("mousemove", e => {
 window.addEventListener("mouseup", () => { dragging = false; });
 
 $("#map-reset").onclick = () => { view = { z: 1, ox: 0, oy: 0 }; drawMap(); };
-$("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); if (cmode === "condition") buildLegend(); };
+$("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); drawHist(); if (cmode === "condition") buildLegend(); };
+$("#hist-scale").onclick = e => { histLog = !histLog; e.currentTarget.textContent = histLog ? "log" : "linear"; e.currentTarget.classList.toggle("on", histLog); drawHist(); };
 
-window.addEventListener("resize", () => { if (mapLoaded && $("#panel-map").classList.contains("active")) drawMap(); });
+window.addEventListener("resize", () => { if (mapLoaded && $("#panel-map").classList.contains("active")) { drawMap(); drawHist(); } });

@@ -47,12 +47,13 @@
           <div id="map-controls">
             <span class="count" id="map-count"></span>
             <div id="map-time">
+              <canvas id="yr-hist" title="papers per year — shaded = full corpus, solid = current filters"></canvas>
               <div class="dual" id="yr-dual">
                 <div class="dual-band" id="yr-band"></div>
                 <input type="range" id="yr-from">
                 <input type="range" id="yr-to">
               </div>
-              <div class="yr-labs"><b id="yr-from-lab"></b><b id="yr-to-lab"></b></div>
+              <div class="yr-labs"><b id="yr-from-lab"></b><button id="hist-scale" class="on" title="histogram vertical scale — click to switch">log</button><b id="yr-to-lab"></b></div>
             </div>
             <label id="oa-toggle"><input type="checkbox" id="oa-only"> open access only</label>
             <div class="toggle" id="map-mode">
