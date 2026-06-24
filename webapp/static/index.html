@@ -77,7 +77,16 @@
               </div>
               <div class="yr-labs"><b id="yr-from-lab"></b><button id="hist-scale" class="on" title="histogram vertical scale — click to switch">log</button><b id="yr-to-lab"></b></div>
             </div>
-            <label id="oa-toggle"><input type="checkbox" id="oa-only"> open access only</label>
+            <div class="toggle" id="map-oa">
+              <button data-oa="" class="on">All</button>
+              <button data-oa="1">Open access</button>
+            </div>
+            <div class="toggle" id="map-type">
+              <button data-type="" class="on">All</button>
+              <button data-type="article">Articles</button>
+              <button data-type="preprint">Preprints</button>
+              <button data-type="clinical_trial">Trials</button>
+            </div>
             <div class="toggle" id="map-mode">
               <button data-cm="topic" class="on">Topics</button>
               <button data-cm="condition">Conditions</button>

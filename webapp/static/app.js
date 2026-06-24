@@ -177,14 +177,16 @@ const COND_RGB = { 1: [194, 84, 122], 2: [201, 138, 43], 4: [106, 90, 205] }; //
 const MULTI_RGB = [214, 36, 143];                      // cross-condition standout (magenta)
 const COND_INFO = [{ m: 1, name: "endometriosis" }, { m: 2, name: "lipedema" }, { m: 4, name: "fibromyalgia" }];
 const popcount = m => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
-let oaOnly = false;
+let oaOnly = false, mapType = "";           // open-access-only filter; publication-type filter ("" = all)
+const TYPE_CODE = { article: 1, preprint: 2, clinical_trial: 3 };  // mirrors app.py; matches point tuple's type code
 let view = { z: 1, ox: 0, oy: 0 };          // zoom + pan (pan offsets in device px)
 // year-histogram colors: shadow = full corpus distribution, fill = current filter result
 const HIST_BG = "#dcdce4";
 const HIST_SEL = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2f7d78";
 let histLog = true;                         // histogram vertical scale: log (default, the skew is exponential) vs linear
-// point tuple: [x, y, macro, sub, year, pmask, is_oa]
-const visible = p => p[4] >= yearMin && p[4] <= yearMax && (!oaOnly || p[6]);
+// point tuple: [x, y, macro, sub, year, pmask, is_oa, type_code]
+const visible = p => p[4] >= yearMin && p[4] <= yearMax && (!oaOnly || p[6])
+  && (!mapType || p[7] === TYPE_CODE[mapType]);
 function makeProj(t) {
   const bx = x => t.pad + (x - t.minx) / (t.maxx - t.minx || 1) * (t.W - 2 * t.pad);
   const by = y => t.H - t.pad - (y - t.miny) / (t.maxy - t.miny || 1) * (t.H - 2 * t.pad);
@@ -476,7 +478,17 @@ window.addEventListener("mousemove", e => {
 window.addEventListener("mouseup", () => { dragging = false; });
 
 $("#map-reset").onclick = () => { view = { z: 1, ox: 0, oy: 0 }; drawMap(); };
-$("#oa-only").onchange = e => { oaOnly = e.target.checked; drawMap(); drawHist(); if (cmode === "condition") buildLegend(); };
+function mapRefilter() { drawMap(); drawHist(); if (cmode === "condition") buildLegend(); }
+$$("#map-oa button").forEach(b => b.onclick = () => {
+  oaOnly = !!b.dataset.oa;
+  $$("#map-oa button").forEach(x => x.classList.toggle("on", x === b));
+  mapRefilter();
+});
+$$("#map-type button").forEach(b => b.onclick = () => {
+  mapType = b.dataset.type;
+  $$("#map-type button").forEach(x => x.classList.toggle("on", x === b));
+  mapRefilter();
+});
 $("#hist-scale").onclick = e => { histLog = !histLog; e.currentTarget.textContent = histLog ? "log" : "linear"; e.currentTarget.classList.toggle("on", histLog); drawHist(); };
 
 // drag the band to slide the whole window (both ends together), preserving its width

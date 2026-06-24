@@ -26,6 +26,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 VECTORS_PATH = embed_mod.VECTORS_PATH
 PATHOLOGIES = ["endometriosis", "lipedema", "fibromyalgia"]
 PMASK = {"endometriosis": 1, "lipedema": 2, "fibromyalgia": 4}  # bitmask for the map
+TYPE_CODE = {"article": 1, "preprint": 2, "clinical_trial": 3}  # compact type code for map points
 
 
 def _mask(pathologies: str) -> int:
@@ -210,12 +211,12 @@ def api_map(pathology: str | None = None):
         where = "WHERE p.pathologies LIKE '%'||?||'%'"
         params.append(pathology)
     rows = con.execute(
-        f"""SELECT m.x, m.y, m.macro, m.cluster, p.year, p.pathologies, p.is_oa FROM paper_map m
+        f"""SELECT m.x, m.y, m.macro, m.cluster, p.year, p.pathologies, p.is_oa, p.type FROM paper_map m
             JOIN idx.papers p ON p.id = m.paper_id {where}""", params).fetchall()
     con.close()
-    # [x, y, macro, sub, year, pmask, is_oa]
+    # [x, y, macro, sub, year, pmask, is_oa, type_code]
     points = [[round(r["x"], 2), round(r["y"], 2), r["macro"], r["cluster"], r["year"] or 0,
-               _mask(r["pathologies"]), int(r["is_oa"] or 0)] for r in rows]
+               _mask(r["pathologies"]), int(r["is_oa"] or 0), TYPE_CODE.get(r["type"], 0)] for r in rows]
     return {"points": points}
 
 
