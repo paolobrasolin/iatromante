@@ -67,6 +67,7 @@ button.go:hover { filter: brightness(1.05); }
 .pill.fibromyalgia { background: var(--fibro); }
 .pill.oa { background: var(--accent); }
 .pill.score { background: #ececf4; color: var(--muted); }
+.pill.kind { background: #ececf4; color: var(--muted); }
 
 .empty, .loading { color: var(--muted); padding: 30px 0; text-align: center; }
 

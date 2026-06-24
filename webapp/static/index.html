@@ -24,7 +24,20 @@
     <!-- LATEST -->
     <section class="panel active" id="panel-latest">
       <p class="feed-intro">The newest papers in the corpus, most recent first.</p>
-      <div id="latest-chips" class="controls"></div>
+      <div class="controls">
+        <div id="latest-chips" style="display:flex;gap:8px;"></div>
+        <span class="spacer"></span>
+        <div class="toggle" id="latest-oa">
+          <button data-oa="" class="on">All</button>
+          <button data-oa="1">Open access</button>
+        </div>
+        <div class="toggle" id="latest-type">
+          <button data-type="" class="on">All</button>
+          <button data-type="article">Articles</button>
+          <button data-type="preprint">Preprints</button>
+          <button data-type="clinical_trial">Trials</button>
+        </div>
+      </div>
       <div id="latest-results"></div>
       <button class="more" id="latest-more" hidden>Load more</button>
     </section>

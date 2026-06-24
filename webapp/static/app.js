@@ -66,6 +66,7 @@ $$(".tab").forEach(t => t.onclick = () => {
 
 // ---- result cards -------------------------------------------------------
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const KIND = { article: "article", preprint: "preprint", clinical_trial: "clinical trial" };  // type label on every card
 function fmtDate(s) {  // "YYYY-MM-DD" -> "Mon YYYY"; the day is often synthetic, so show month precision
   if (!s) return "";
   const [y, m] = s.split("-");
@@ -74,7 +75,8 @@ function fmtDate(s) {  // "YYYY-MM-DD" -> "Mon YYYY"; the day is often synthetic
 function cardEl(r) {
   const div = document.createElement("div");
   div.className = "card";
-  const tags = r.pathologies.map(p => `<span class="pill ${p}">${p}</span>`).join("")
+  const tags = (KIND[r.type] ? `<span class="pill kind">${KIND[r.type]}</span>` : "")
+    + r.pathologies.map(p => `<span class="pill ${p}">${p}</span>`).join("")
     + (r.is_oa ? '<span class="pill oa">free full text</span>' : "")
     + (r.score != null ? `<span class="pill score">${Math.round(r.score * 100)}% match</span>` : "");
   const meta = [r.authors, r.venue, r.pub_date ? fmtDate(r.pub_date) : r.year].filter(Boolean).join(" · ");
@@ -91,23 +93,35 @@ function renderCards(host, results) {
 
 // ---- latest feed --------------------------------------------------------
 const LATEST_PAGE = 30;
-let latestOffset = 0;
+let latestOffset = 0, latestType = "", latestOA = "";
 function loadLatest(reset) {
   if (reset) { latestOffset = 0; $("#latest-results").innerHTML = '<div class="loading">Loading…</div>'; }
   const u = new URL("/api/latest", location.origin);
   u.searchParams.set("limit", LATEST_PAGE);
   u.searchParams.set("offset", latestOffset);
   if (sel.latest) u.searchParams.set("pathology", sel.latest);
+  if (latestType) u.searchParams.set("type", latestType);
+  if (latestOA) u.searchParams.set("oa", "1");
   api(u).then(d => {
     const host = $("#latest-results");
     if (reset) host.innerHTML = "";
-    if (reset && !d.results.length) host.innerHTML = '<div class="empty">Nothing here yet.</div>';
+    if (reset && !d.results.length) host.innerHTML = '<div class="empty">No papers match these filters.</div>';
     d.results.forEach(r => host.appendChild(cardEl(r)));
     latestOffset += d.results.length;
     $("#latest-more").hidden = d.results.length < LATEST_PAGE;
   });
 }
 $("#latest-more").onclick = () => loadLatest(false);
+$$("#latest-type button").forEach(b => b.onclick = () => {
+  latestType = b.dataset.type;
+  $$("#latest-type button").forEach(x => x.classList.toggle("on", x === b));
+  loadLatest(true);
+});
+$$("#latest-oa button").forEach(b => b.onclick = () => {
+  latestOA = b.dataset.oa;
+  $$("#latest-oa button").forEach(x => x.classList.toggle("on", x === b));
+  loadLatest(true);
+});
 
 // ---- search -------------------------------------------------------------
 $("#search-go").onclick = doSearch;

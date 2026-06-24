@@ -118,17 +118,23 @@ def api_search(q: str = Query(...), mode: str = "semantic",
 
 
 @app.get("/api/latest")
-def api_latest(limit: int = 30, offset: int = 0, pathology: str | None = None):
+def api_latest(limit: int = 30, offset: int = 0, pathology: str | None = None,
+               type: str | None = Query(None), oa: bool = False):
     """Reverse-chronological feed of the newest papers (by publication date)."""
     con = _index_db()
-    where = "pub_date <> ''"
+    clauses = ["pub_date <> ''"]
     params: list = []
     if pathology:
-        where += " AND pathologies LIKE '%'||?||'%'"
+        clauses.append("pathologies LIKE '%'||?||'%'")
         params.append(pathology)
+    if type:
+        clauses.append("type = ?")
+        params.append(type)
+    if oa:
+        clauses.append("is_oa = 1")
     params += [limit, offset]
     rows = con.execute(
-        f"""SELECT * FROM papers WHERE {where}
+        f"""SELECT * FROM papers WHERE {' AND '.join(clauses)}
             ORDER BY pub_date DESC, rowid DESC LIMIT ? OFFSET ?""", params).fetchall()
     con.close()
     return {"results": [_card(r) for r in rows]}
