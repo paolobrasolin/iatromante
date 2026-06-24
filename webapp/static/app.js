@@ -2,7 +2,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const api = (p) => fetch(p).then(r => r.json());
 const PATHS = [];
-const sel = { search: null }; // selected pathology per tab
+const sel = { latest: null, search: null }; // selected pathology per tab
 let MODE = "semantic";
 
 function hslRGB(h, s, l) {  // h,s,l in [0,1] -> [r,g,b]
@@ -37,6 +37,8 @@ api("/api/meta").then(m => {
   $("#count").textContent = m.total.toLocaleString() + " papers";
   PATHS.push(...m.pathologies);
   buildChips("#search-chips", "search");
+  buildChips("#latest-chips", "latest");
+  loadLatest(true);
 });
 
 function buildChips(sel_, tab) {
@@ -48,6 +50,7 @@ function buildChips(sel_, tab) {
     c.onclick = () => {
       sel[tab] = sel[tab] === p ? null : p;
       $$(".chip", host).forEach(x => x.classList.toggle("on", x.dataset.path === sel[tab]));
+      if (tab === "latest") loadLatest(true);
     };
     host.appendChild(c);
   });
@@ -62,22 +65,49 @@ $$(".tab").forEach(t => t.onclick = () => {
 });
 
 // ---- result cards -------------------------------------------------------
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function fmtDate(s) {  // "YYYY-MM-DD" -> "Mon YYYY"; the day is often synthetic, so show month precision
+  if (!s) return "";
+  const [y, m] = s.split("-");
+  return (m ? MONTHS[+m - 1] + " " : "") + y;
+}
+function cardEl(r) {
+  const div = document.createElement("div");
+  div.className = "card";
+  const tags = r.pathologies.map(p => `<span class="pill ${p}">${p}</span>`).join("")
+    + (r.is_oa ? '<span class="pill oa">free full text</span>' : "")
+    + (r.score != null ? `<span class="pill score">${Math.round(r.score * 100)}% match</span>` : "");
+  const meta = [r.authors, r.venue, r.pub_date ? fmtDate(r.pub_date) : r.year].filter(Boolean).join(" · ");
+  div.innerHTML = `<h3>${esc(r.title)}</h3><div class="meta">${esc(meta)}</div>
+    <div class="snip">${r.snippet || ""}</div><div class="tags">${tags}</div>`;
+  div.onclick = () => openPaper(r.id);
+  return div;
+}
 function renderCards(host, results) {
   host.innerHTML = "";
   if (!results.length) { host.innerHTML = '<div class="empty">No results.</div>'; return; }
-  results.forEach(r => {
-    const div = document.createElement("div");
-    div.className = "card";
-    const tags = r.pathologies.map(p => `<span class="pill ${p}">${p}</span>`).join("")
-      + (r.is_oa ? '<span class="pill oa">free full text</span>' : "")
-      + (r.score != null ? `<span class="pill score">${Math.round(r.score * 100)}% match</span>` : "");
-    const meta = [r.authors, r.venue, r.year].filter(Boolean).join(" · ");
-    div.innerHTML = `<h3>${esc(r.title)}</h3><div class="meta">${esc(meta)}</div>
-      <div class="snip">${r.snippet || ""}</div><div class="tags">${tags}</div>`;
-    div.onclick = () => openPaper(r.id);
-    host.appendChild(div);
+  results.forEach(r => host.appendChild(cardEl(r)));
+}
+
+// ---- latest feed --------------------------------------------------------
+const LATEST_PAGE = 30;
+let latestOffset = 0;
+function loadLatest(reset) {
+  if (reset) { latestOffset = 0; $("#latest-results").innerHTML = '<div class="loading">Loading…</div>'; }
+  const u = new URL("/api/latest", location.origin);
+  u.searchParams.set("limit", LATEST_PAGE);
+  u.searchParams.set("offset", latestOffset);
+  if (sel.latest) u.searchParams.set("pathology", sel.latest);
+  api(u).then(d => {
+    const host = $("#latest-results");
+    if (reset) host.innerHTML = "";
+    if (reset && !d.results.length) host.innerHTML = '<div class="empty">Nothing here yet.</div>';
+    d.results.forEach(r => host.appendChild(cardEl(r)));
+    latestOffset += d.results.length;
+    $("#latest-more").hidden = d.results.length < LATEST_PAGE;
   });
 }
+$("#latest-more").onclick = () => loadLatest(false);
 
 // ---- search -------------------------------------------------------------
 $("#search-go").onclick = doSearch;

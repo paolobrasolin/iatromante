@@ -4,8 +4,9 @@ Reads the derived artifacts built by the `feed` pipeline:
   data/index.sqlite    -- FTS5 keyword search + paper metadata/abstracts
   data/vectors.sqlite  -- embeddings (semantic search) + map coords + clusters
 
-Serves a small single-page UI (Search / Map). Search offers both keyword
-(FTS5) and semantic (embedding) modes over the same corpus.
+Serves a small single-page UI (Latest / Search / Map). Latest is a
+reverse-chronological feed of the newest papers; Search offers both
+keyword (FTS5) and semantic (embedding) modes over the same corpus.
 """
 
 from __future__ import annotations
@@ -59,7 +60,8 @@ def _card(row: sqlite3.Row, score: float | None = None, snippet: str | None = No
     return {
         "id": row["id"], "title": row["title"] or "(untitled)",
         "authors": author_str, "venue": row["venue"] or "",
-        "year": row["year"], "type": row["type"], "url": row["url"] or "",
+        "year": row["year"], "pub_date": row["pub_date"] or "",
+        "type": row["type"], "url": row["url"] or "",
         "pathologies": [p for p in (row["pathologies"] or "").split(",") if p],
         "is_oa": bool(row["is_oa"]),
         "snippet": snippet or (abstract[:280] + ("…" if len(abstract) > 280 else "")),
@@ -113,6 +115,23 @@ def api_search(q: str = Query(...), mode: str = "semantic",
     finally:
         con.close()
     return {"mode": mode, "results": results}
+
+
+@app.get("/api/latest")
+def api_latest(limit: int = 30, offset: int = 0, pathology: str | None = None):
+    """Reverse-chronological feed of the newest papers (by publication date)."""
+    con = _index_db()
+    where = "pub_date <> ''"
+    params: list = []
+    if pathology:
+        where += " AND pathologies LIKE '%'||?||'%'"
+        params.append(pathology)
+    params += [limit, offset]
+    rows = con.execute(
+        f"""SELECT * FROM papers WHERE {where}
+            ORDER BY pub_date DESC, rowid DESC LIMIT ? OFFSET ?""", params).fetchall()
+    con.close()
+    return {"results": [_card(r) for r in rows]}
 
 
 @app.get("/api/paper/{paper_id:path}")

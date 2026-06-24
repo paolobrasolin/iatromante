@@ -14,14 +14,23 @@
     </div>
     <p class="tagline">Endometriosis · lipedema · fibromyalgia — the literature, searchable.</p>
     <nav class="tabs">
-      <button class="tab active" data-tab="search">Search</button>
+      <button class="tab active" data-tab="latest">Latest</button>
+      <button class="tab" data-tab="search">Search</button>
       <button class="tab" data-tab="map">Map</button>
     </nav>
   </header>
 
   <main>
+    <!-- LATEST -->
+    <section class="panel active" id="panel-latest">
+      <p class="feed-intro">The newest papers in the corpus, most recent first.</p>
+      <div id="latest-chips" class="controls"></div>
+      <div id="latest-results"></div>
+      <button class="more" id="latest-more" hidden>Load more</button>
+    </section>
+
     <!-- SEARCH -->
-    <section class="panel active" id="panel-search">
+    <section class="panel" id="panel-search">
       <div class="searchbar">
         <input type="text" id="search-q" placeholder="Search the literature…">
         <button class="go" id="search-go">Search</button>
